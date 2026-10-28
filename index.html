@@ -1,0 +1,580 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Signal Lab</title>
+<meta name="description" content="How the Early Pump &amp; Dump Detector decides which trades to take and which to reject. Interactive plan for Tomas.">
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#070C17">
+<script>document.documentElement.classList.add("js")</script>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23070C17'/%3E%3Cpath d='M5 21h6l3-4 3 2 5-11' stroke='%234C9BE0' stroke-width='2.6' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3Ccircle cx='22' cy='8' r='3.2' fill='%23FFCF33'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: trading-desk precision. Dark ink ground, chart-grid texture, one signal-yellow accent for decisions. */
+:root {
+  --bg: #070C17; --bg2: #0B1322; --panel: rgba(15, 25, 44, .72); --solid: #0F1A2D;
+  --line: rgba(140, 165, 210, .14); --line2: rgba(140, 165, 210, .28);
+  --fg: #E9EEF7; --muted: #8D9AB3; --blue: #4C9BE0; --blue-soft: rgba(76, 155, 224, .16);
+  --signal: #FFCF33; --signal-ink: #FFCF33; --signal-soft: rgba(255, 207, 51, .14); --head-accent: #FFCF33;
+  --up: #43C59E; --down: #F0675A; --up-soft: rgba(67, 197, 158, .14); --down-soft: rgba(240, 103, 90, .14);
+  --grid: rgba(140, 165, 210, .07); --shadow: 0 30px 80px -30px rgba(0, 0, 0, .7);
+  --display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, Consolas, monospace;
+  --r: 18px; --max: 1180px;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #F3F6FA; --bg2: #E8EEF6; --panel: rgba(255, 255, 255, .82); --solid: #FFFFFF;
+    --line: rgba(20, 40, 80, .12); --line2: rgba(20, 40, 80, .24);
+    --fg: #0B1F3A; --muted: #55637B; --blue: #0A64A8; --blue-soft: rgba(10, 100, 168, .1);
+    --signal: #FECC00; --signal-ink: #8A6400; --signal-soft: rgba(254, 204, 0, .22); --head-accent: #0A64A8;
+    --up: #12865D; --down: #C63F2E; --up-soft: rgba(18, 134, 93, .1); --down-soft: rgba(198, 63, 46, .1);
+    --grid: rgba(20, 40, 80, .06); --shadow: 0 30px 70px -34px rgba(11, 31, 58, .35);
+    color-scheme: light;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #F3F6FA; --bg2: #E8EEF6; --panel: rgba(255, 255, 255, .82); --solid: #FFFFFF;
+  --line: rgba(20, 40, 80, .12); --line2: rgba(20, 40, 80, .24);
+  --fg: #0B1F3A; --muted: #55637B; --blue: #0A64A8; --blue-soft: rgba(10, 100, 168, .1);
+  --signal: #FECC00; --signal-ink: #8A6400; --signal-soft: rgba(254, 204, 0, .22); --head-accent: #0A64A8;
+  --up: #12865D; --down: #C63F2E; --up-soft: rgba(18, 134, 93, .1); --down-soft: rgba(198, 63, 46, .1);
+  --grid: rgba(20, 40, 80, .06); --shadow: 0 30px 70px -34px rgba(11, 31, 58, .35);
+  color-scheme: light;
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--fg); font: 400 16px/1.6 var(--body);
+  overflow-x: hidden; -webkit-font-smoothing: antialiased;
+}
+img, canvas { max-width: 100%; display: block; }
+a { color: inherit; }
+h1, h2, h3 { font-family: var(--display); text-wrap: balance; margin: 0; letter-spacing: -.02em; }
+p { margin: 0; }
+:focus-visible { outline: 2px solid var(--signal); outline-offset: 3px; border-radius: 6px; }
+.wrap {
+  max-width: var(--max); margin: 0 auto;
+  padding-left: max(20px, env(safe-area-inset-left, 0px)); padding-right: max(20px, env(safe-area-inset-right, 0px));
+}
+.mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.eyebrow {
+  font: 600 12px/1 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--blue);
+  display: inline-flex; align-items: center; gap: 10px;
+}
+.eyebrow::before { content: ""; width: 22px; height: 2px; background: var(--signal); }
+
+/* progress + nav */
+.progress { position: fixed; top: 0; left: 0; height: 2px; width: 100%; transform-origin: 0 50%; transform: scaleX(0);
+  background: linear-gradient(90deg, var(--blue), var(--signal)); z-index: 60; }
+.nav { position: sticky; top: 0; z-index: 50; backdrop-filter: blur(14px) saturate(140%); -webkit-backdrop-filter: blur(14px) saturate(140%);
+  background: color-mix(in srgb, var(--bg) 72%, transparent); border-bottom: 1px solid var(--line); }
+.nav .wrap { display: flex; align-items: center; gap: 24px; height: 62px; }
+.brand { display: flex; align-items: center; gap: 10px; font: 700 17px/1 var(--display); text-decoration: none; letter-spacing: -.01em; }
+.brand svg { width: 26px; height: 26px; }
+.nav-links { display: flex; gap: 4px; margin-left: auto; }
+.nav-links a { text-decoration: none; color: var(--muted); font-size: 14px; padding: 8px 12px; border-radius: 999px; transition: color .2s, background .2s; }
+.nav-links a:hover, .nav-links a.active { color: var(--fg); background: var(--blue-soft); }
+@media (max-width: 860px) { .nav-links { display: none; } .nav .btn { margin-left: auto; } }
+
+.btn { --mx: 0px; --my: 0px; display: inline-flex; align-items: center; gap: 10px; font: 600 15px/1 var(--body);
+  padding: 15px 22px; border-radius: 999px; text-decoration: none; border: 1px solid var(--line2); color: var(--fg);
+  background: transparent; cursor: pointer; transform: translate(var(--mx), var(--my)); transition: transform .25s cubic-bezier(.2,.8,.2,1), background .2s, border-color .2s; }
+.btn:hover { border-color: var(--fg); }
+.btn.primary { background: var(--signal); color: #0B1322; border-color: transparent; box-shadow: 0 10px 30px -10px color-mix(in srgb, var(--signal) 70%, transparent); }
+.btn.primary:hover { background: color-mix(in srgb, var(--signal) 88%, white); }
+.btn.small { padding: 10px 16px; font-size: 14px; }
+.btn svg { width: 16px; height: 16px; transition: transform .25s; }
+.btn:hover svg { transform: translateX(3px); }
+
+/* hero */
+.hero { position: relative; isolation: isolate; overflow: hidden; padding-block: 72px 88px; }
+.hero::before { content: ""; position: absolute; inset: 0; z-index: -2;
+  background-image: linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  background-size: 48px 48px; mask-image: radial-gradient(ellipse 70% 70% at 60% 40%, #000 30%, transparent 75%); -webkit-mask-image: radial-gradient(ellipse 70% 70% at 60% 40%, #000 30%, transparent 75%); }
+.aurora { position: absolute; inset: -20% -10% auto; height: 120%; z-index: -3; filter: blur(70px); opacity: .55; pointer-events: none; }
+.aurora i { position: absolute; border-radius: 50%; animation: drift 22s ease-in-out infinite alternate; }
+.aurora i:nth-child(1) { width: 46vw; height: 46vw; left: 48%; top: 6%; background: radial-gradient(circle, color-mix(in srgb, var(--blue) 55%, transparent), transparent 65%); }
+.aurora i:nth-child(2) { width: 30vw; height: 30vw; left: 70%; top: 34%; background: radial-gradient(circle, color-mix(in srgb, var(--signal) 26%, transparent), transparent 65%); animation-duration: 28s; animation-delay: -8s; }
+.aurora i:nth-child(3) { width: 40vw; height: 40vw; left: -6%; top: 40%; background: radial-gradient(circle, color-mix(in srgb, var(--blue) 22%, transparent), transparent 65%); animation-duration: 34s; }
+@keyframes drift { to { transform: translate3d(-6vw, 5vh, 0) scale(1.15); } }
+
+.hero-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.08fr); gap: 56px; align-items: center; }
+.hero h1 { font-size: clamp(44px, 6.4vw, 86px); line-height: .98; font-weight: 800; margin-top: 22px; }
+.hero h1 .line { display: block; overflow: hidden; padding-bottom: .06em; }
+.hero h1 .w { display: inline-block; animation: rise 1s cubic-bezier(.2,.8,.2,1) both; animation-delay: calc(var(--i) * 80ms + 120ms); }
+.hero h1 .accent { color: var(--head-accent); }
+@keyframes rise { from { transform: translateY(105%); } to { transform: none; } }
+.lead { font-size: clamp(17px, 1.5vw, 19px); color: var(--muted); max-width: 54ch; margin-top: 24px; }
+.lead b { color: var(--fg); font-weight: 600; }
+.hero-cta { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 34px; }
+.facts { display: grid; grid-template-columns: repeat(4, auto); justify-content: start; gap: 18px 30px; margin-top: 44px; padding-top: 24px; border-top: 1px solid var(--line); }
+.facts div { display: grid; gap: 2px; }
+.facts b { font: 700 22px/1.1 var(--display); white-space: nowrap; }
+.facts span { font-size: 13px; color: var(--muted); }
+
+.terminal { position: relative; border-radius: 22px; background: var(--panel); border: 1px solid var(--line2);
+  box-shadow: var(--shadow); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); overflow: hidden; }
+.term-head { display: flex; align-items: center; gap: 10px; padding: 14px 18px; border-bottom: 1px solid var(--line); font: 500 12.5px/1 var(--mono); color: var(--muted); }
+.term-head .sym { color: var(--fg); font-weight: 600; }
+.live { margin-left: auto; display: inline-flex; align-items: center; gap: 7px; letter-spacing: .1em; font-size: 11px; }
+.live::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--signal); box-shadow: 0 0 0 0 var(--signal); animation: ping 1.8s infinite; }
+@keyframes ping { 70% { box-shadow: 0 0 0 8px transparent; } 100% { box-shadow: 0 0 0 0 transparent; } }
+.term-chart { position: relative; height: 290px; }
+.term-chart canvas { width: 100%; height: 100%; }
+.readout { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-top: 1px solid var(--line); }
+.readout div { padding: 12px 16px; border-right: 1px solid var(--line); min-width: 0; }
+.readout div:last-child { border-right: 0; }
+.readout small { display: block; font: 500 10.5px/1.2 var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.readout b { font: 600 17px/1.5 var(--mono); font-variant-numeric: tabular-nums; }
+.scorebar { display: flex; align-items: center; gap: 14px; padding: 14px 18px; border-top: 1px solid var(--line); }
+.scorebar .lbl { font: 500 11px/1 var(--mono); letter-spacing: .1em; color: var(--muted); }
+.meter { position: relative; flex: 1; height: 8px; border-radius: 99px; background: var(--line); overflow: visible; }
+.meter i { position: absolute; inset: 0 auto 0 0; width: 0; border-radius: 99px; background: linear-gradient(90deg, var(--blue), var(--signal)); transition: width .25s ease; }
+.meter .th { position: absolute; left: 70%; top: -5px; bottom: -5px; width: 2px; background: var(--fg); opacity: .55; }
+.scorebar .num { font: 700 22px/1 var(--mono); min-width: 2.2ch; text-align: right; font-variant-numeric: tabular-nums; }
+.verdict { display: flex; align-items: center; gap: 12px; padding: 14px 18px; border-top: 1px solid var(--line); min-height: 62px; font-size: 14px; color: var(--muted); }
+.pill { flex: none; font: 700 12px/1 var(--mono); letter-spacing: .08em; padding: 8px 11px; border-radius: 8px; background: var(--line); color: var(--fg); }
+.pill.take { background: var(--up-soft); color: var(--up); box-shadow: inset 0 0 0 1px var(--up); }
+.pill.reject { background: var(--down-soft); color: var(--down); box-shadow: inset 0 0 0 1px var(--down); }
+.pill.ignore { background: var(--blue-soft); color: var(--blue); box-shadow: inset 0 0 0 1px var(--blue); }
+.verdict.flash .pill { animation: pop .5s cubic-bezier(.2,1.6,.4,1); }
+@keyframes pop { from { transform: scale(.7); } }
+.sim-note { margin-top: 12px; font-size: 12.5px; color: var(--muted); display: flex; gap: 8px; align-items: center; }
+.sim-note::before { content: "SIM"; font: 700 10px/1 var(--mono); letter-spacing: .1em; padding: 4px 6px; border-radius: 5px; border: 1px solid var(--line2); }
+
+/* sections */
+section.block { padding-block: 110px; position: relative; }
+section.alt { background: var(--bg2); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.sec-head { display: grid; gap: 16px; max-width: 760px; margin-bottom: 48px; }
+.sec-head h2 { font-size: clamp(32px, 4.2vw, 54px); line-height: 1.04; font-weight: 800; }
+.sec-head p { color: var(--muted); font-size: 18px; max-width: 62ch; }
+.quote-tag { font-style: italic; color: var(--fg); }
+
+.card { position: relative; border-radius: var(--r); background: var(--panel); border: 1px solid var(--line); overflow: hidden; }
+.glow::after { content: ""; position: absolute; inset: 0; pointer-events: none; opacity: 0; transition: opacity .3s;
+  background: radial-gradient(420px circle at var(--gx, 50%) var(--gy, 50%), color-mix(in srgb, var(--blue) 14%, transparent), transparent 60%); }
+.glow:hover::after { opacity: 1; }
+
+/* explorer */
+.tabs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 22px; }
+.tab { display: inline-flex; align-items: center; gap: 9px; font: 500 14px/1 var(--body); padding: 11px 16px; border-radius: 999px;
+  border: 1px solid var(--line2); background: transparent; color: var(--muted); cursor: pointer; transition: all .2s; }
+.tab:hover { color: var(--fg); border-color: var(--fg); }
+.tab[aria-selected="true"] { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+.tab .dot { width: 8px; height: 8px; border-radius: 50%; }
+.dot.take { background: var(--up); } .dot.reject { background: var(--down); } .dot.ignore { background: var(--blue); }
+.explorer { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 18px; }
+.ex-chart { padding: 6px 6px 0; display: flex; flex-direction: column; }
+.ex-chart .cv { flex: 1; min-height: 340px; position: relative; }
+.ex-chart .cv canvas { position: absolute; inset: 0; }
+.ex-chart .cv canvas { width: 100%; height: 100%; }
+.story { padding: 20px 22px 24px; border-top: 1px solid var(--line); display: grid; gap: 10px; }
+.story h3 { font-size: 22px; font-weight: 700; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.story p { color: var(--muted); max-width: 62ch; }
+.side-col { display: grid; gap: 18px; align-content: start; }
+.panel-pad { padding: 20px 22px; }
+.panel-title { display: flex; justify-content: space-between; align-items: baseline; font: 600 11.5px/1 var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); margin-bottom: 16px; }
+.parts { display: grid; gap: 13px; }
+.part { display: grid; grid-template-columns: 112px minmax(0, 1fr) 44px; gap: 12px; align-items: center; font-size: 14px; }
+.part .nm { font-weight: 500; }
+.part .nm small { display: block; font: 400 11.5px/1.35 var(--mono); color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.part .bar { height: 8px; border-radius: 99px; background: var(--line); overflow: hidden; }
+.part .bar i { display: block; height: 100%; width: 0; border-radius: inherit; background: var(--blue); transition: width .7s cubic-bezier(.2,.8,.2,1); }
+.part .pts { font: 600 13px/1 var(--mono); text-align: right; font-variant-numeric: tabular-nums; }
+.total { display: flex; align-items: center; gap: 14px; margin-top: 18px; padding-top: 16px; border-top: 1px dashed var(--line2); }
+.total .meter { height: 10px; }
+.total .num { font: 700 26px/1 var(--mono); }
+.flist { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.flist li { display: grid; grid-template-columns: 26px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 8px 0; font-size: 14px; border-bottom: 1px solid var(--line); }
+.flist li:last-child { border-bottom: 0; }
+.st { width: 22px; height: 22px; border-radius: 6px; display: grid; place-items: center; font: 700 12px/1 var(--mono); }
+.st.pass { background: var(--up-soft); color: var(--up); } .st.fail { background: var(--down-soft); color: var(--down); } .st.na { background: var(--line); color: var(--muted); }
+.flist .tag { font: 500 11px/1 var(--mono); color: var(--muted); letter-spacing: .06em; }
+.flist li.fail-row { color: var(--down); }
+
+/* math */
+.math { display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); gap: 18px; }
+.controls { padding: 26px; display: grid; gap: 26px; align-content: start; }
+.ctrl { display: grid; gap: 10px; }
+.ctrl label, .ctrl .lab { display: flex; justify-content: space-between; align-items: baseline; font-weight: 500; font-size: 15px; }
+.ctrl output { font: 600 15px/1 var(--mono); color: var(--signal-ink); }
+.ctrl .hint { font-size: 13px; color: var(--muted); }
+input[type="range"] { -webkit-appearance: none; appearance: none; width: 100%; height: 26px; background: transparent; cursor: pointer; }
+input[type="range"]::-webkit-slider-runnable-track { height: 6px; border-radius: 99px; background: linear-gradient(90deg, var(--blue) var(--p, 50%), var(--line) var(--p, 50%)); }
+input[type="range"]::-moz-range-track { height: 6px; border-radius: 99px; background: linear-gradient(90deg, var(--blue) var(--p, 50%), var(--line) var(--p, 50%)); }
+input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 22px; height: 22px; margin-top: -8px; border-radius: 50%; background: var(--fg); border: 4px solid var(--bg); box-shadow: 0 0 0 1px var(--line2); transition: transform .15s; }
+input[type="range"]::-moz-range-thumb { width: 16px; height: 16px; border-radius: 50%; background: var(--fg); border: 4px solid var(--bg); }
+input[type="range"]:active::-webkit-slider-thumb { transform: scale(1.15); }
+.seg { display: grid; grid-template-columns: repeat(3, 1fr); padding: 4px; border-radius: 12px; background: var(--line); gap: 4px; }
+.seg button { font: 600 15px/1 var(--mono); padding: 11px 0; border: 0; border-radius: 9px; background: transparent; color: var(--muted); cursor: pointer; transition: all .2s; }
+.seg button[aria-pressed="true"] { background: var(--solid); color: var(--fg); box-shadow: 0 2px 10px -4px rgba(0,0,0,.4); }
+.result { padding: 26px; display: grid; gap: 20px; align-content: start; }
+.big { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+.big .val { font: 800 clamp(48px, 6vw, 72px)/1 var(--display); letter-spacing: -.03em; font-variant-numeric: tabular-nums; transition: color .3s; }
+.big .unit { color: var(--muted); font-size: 15px; }
+.val.pos { color: var(--up); } .val.neg { color: var(--down); }
+.verdict-line { font-size: 16px; max-width: 58ch; }
+.math-cv { height: 200px; } .math-cv canvas { width: 100%; height: 100%; }
+.breakdown { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.breakdown div { padding: 12px 14px; border-radius: 12px; background: var(--line); min-width: 0; }
+.breakdown small { display: block; font: 500 11px/1.3 var(--mono); color: var(--muted); letter-spacing: .04em; }
+.breakdown b { font: 600 17px/1.4 var(--mono); font-variant-numeric: tabular-nums; }
+.assume { font-size: 13px; color: var(--muted); }
+
+/* filters */
+.fgrid { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 18px; }
+.tbl-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; min-width: 560px; }
+th { text-align: left; font: 600 11px/1.2 var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); padding: 14px 16px; border-bottom: 1px solid var(--line2); }
+td { padding: 13px 16px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+tr:last-child td { border-bottom: 0; }
+td.n { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.rbar { display: flex; align-items: center; gap: 10px; }
+.rbar i { display: block; height: 6px; border-radius: 99px; background: var(--up); width: var(--w); transform-origin: 0 50%; }
+.rbar i.neg { background: var(--down); }
+.chip { font: 700 10.5px/1 var(--mono); letter-spacing: .08em; padding: 6px 8px; border-radius: 6px; }
+.chip.keep { background: var(--up-soft); color: var(--up); } .chip.tune { background: var(--signal-soft); color: var(--signal-ink); }
+.illus { display: flex; align-items: center; gap: 10px; padding: 12px 16px; font-size: 13px; color: var(--signal-ink); background: var(--signal-soft); border-bottom: 1px solid var(--line); }
+.guard { padding: 24px; display: grid; gap: 18px; align-content: start; }
+.guard h3 { font-size: 22px; }
+.guard ul { list-style: none; padding: 0; margin: 0; display: grid; gap: 14px; }
+.guard li { display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 12px; color: var(--muted); font-size: 15px; }
+.guard li b { color: var(--fg); font-weight: 600; display: block; }
+.ico { width: 30px; height: 30px; border-radius: 9px; background: var(--blue-soft); display: grid; place-items: center; color: var(--blue); }
+.ico svg { width: 16px; height: 16px; }
+
+/* proof */
+.steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; counter-reset: s; }
+.step { padding: 26px; display: grid; gap: 12px; align-content: start; transition: transform .35s cubic-bezier(.2,.8,.2,1), border-color .3s; }
+.step:hover { transform: translateY(-4px); border-color: var(--line2); }
+.step .k { font: 600 12px/1 var(--mono); color: var(--blue); letter-spacing: .1em; }
+.step h3 { font-size: 21px; font-weight: 700; }
+.step p { color: var(--muted); font-size: 15px; }
+.metrics { margin-top: 18px; padding: 22px 26px; display: flex; flex-wrap: wrap; gap: 10px 12px; align-items: center; }
+.metrics span.m { font: 500 13px/1 var(--mono); padding: 9px 12px; border-radius: 99px; border: 1px solid var(--line2); }
+.metrics strong { margin-right: 8px; font-size: 15px; }
+
+/* plan */
+.plan { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+.ms { padding: 24px; display: grid; gap: 12px; align-content: start; }
+.ms .top { display: flex; justify-content: space-between; align-items: baseline; }
+.ms .id { font: 700 13px/1 var(--mono); color: var(--blue); letter-spacing: .08em; }
+.ms .price { font: 800 30px/1 var(--display); }
+.ms h3 { font-size: 19px; }
+.ms p { color: var(--muted); font-size: 14.5px; }
+.ms .days { font: 500 12px/1 var(--mono); color: var(--muted); letter-spacing: .06em; }
+.ms .check { font-size: 13.5px; padding-top: 12px; border-top: 1px dashed var(--line2); }
+.ms .check b { color: var(--up); font-weight: 600; }
+.gantt { margin-top: 18px; padding: 22px 24px; }
+.g-row { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 14px; align-items: center; padding: 6px 0; font-size: 13.5px; }
+.g-track { display: grid; grid-template-columns: repeat(14, 1fr); gap: 3px; height: 22px; }
+.g-track i { border-radius: 5px; background: var(--blue); transform-origin: 0 50%; }
+.g-track i.demo { background: var(--blue-soft); box-shadow: inset 0 0 0 1px var(--blue); }
+.g-days { display: grid; grid-template-columns: repeat(14, 1fr); gap: 3px; font: 500 11px/1 var(--mono); color: var(--muted); text-align: center; }
+.pay { margin-top: 18px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 0; }
+.pay .sum { padding: 30px; border-right: 1px solid var(--line); display: grid; gap: 8px; align-content: center; }
+.pay .sum .tot { color: var(--fg); font: 800 clamp(44px, 5vw, 60px)/1 var(--display); letter-spacing: -.03em; }
+.pay .sum span { color: var(--muted); }
+.flow { padding: 30px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; position: relative; }
+.flow div { display: grid; gap: 8px; align-content: start; }
+.flow .n { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; font: 700 14px/1 var(--mono); background: var(--signal); color: #0B1322; }
+.flow b { font-size: 16px; }
+.flow p { font-size: 14px; color: var(--muted); }
+
+.cta { padding-block: 130px 90px; text-align: left; }
+.cta h2 { font-size: clamp(36px, 5.4vw, 72px); line-height: 1.02; font-weight: 800; max-width: 16ch; }
+.cta p { color: var(--muted); font-size: 18px; margin-top: 22px; max-width: 56ch; }
+.sig { margin-top: 40px; display: flex; align-items: center; gap: 14px; }
+.sig .av { width: 46px; height: 46px; border-radius: 50%; background: linear-gradient(135deg, var(--blue), var(--signal)); display: grid; place-items: center; font: 800 17px/1 var(--display); color: #0B1322; }
+.sig b { display: block; } .sig span { color: var(--muted); font-size: 14px; }
+footer { border-top: 1px solid var(--line); padding-block: 26px 34px; color: var(--muted); font-size: 13px; }
+footer .wrap { display: flex; flex-wrap: wrap; gap: 10px 30px; justify-content: space-between; }
+
+/* reveal */
+.js .reveal { opacity: 0; transform: translateY(26px); transition: opacity .9s cubic-bezier(.2,.8,.2,1), transform .9s cubic-bezier(.2,.8,.2,1); transition-delay: var(--d, 0ms); }
+.js .reveal.in { opacity: 1; transform: none; }
+
+@media (max-width: 1020px) {
+  .hero-grid, .explorer, .math, .fgrid, .pay { grid-template-columns: minmax(0, 1fr); }
+  .plan { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .steps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pay .sum { border-right: 0; border-bottom: 1px solid var(--line); }
+}
+@media (max-width: 620px) {
+  .wrap { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  .hero { padding-block: 40px 64px; }
+  section.block { padding-block: 76px; }
+  .readout { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .readout div:nth-child(2) { border-right: 0; }
+  .readout div:nth-child(-n+2) { border-bottom: 1px solid var(--line); }
+  .term-chart { height: 230px; }
+  .ex-chart .cv { min-height: 260px; flex: none; height: 260px; }
+  .plan, .steps, .flow { grid-template-columns: minmax(0, 1fr); }
+  .breakdown { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .part { grid-template-columns: 96px minmax(0, 1fr) 40px; }
+  .g-row { grid-template-columns: 1fr; gap: 6px; }
+  .g-days { display: none; }
+  .facts { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+  .js .reveal { opacity: 1; transform: none; }
+}
+</style>
+</head>
+<body>
+<div class="progress" id="progress"></div>
+
+<header class="nav">
+  <div class="wrap">
+    <a class="brand" href="#top" aria-label="Signal Lab, back to top">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="var(--solid)" stroke="var(--line2)"/><path d="M5 21h6l3-4 3 2 5-11" stroke="var(--blue)" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/><circle cx="22" cy="8" r="3.2" fill="var(--signal)"/></svg>
+      Signal Lab
+    </a>
+    <nav class="nav-links" aria-label="Sections">
+      <a href="#decide">Decisions</a>
+      <a href="#math">The math</a>
+      <a href="#filters">Filters</a>
+      <a href="#proof">Proof</a>
+      <a href="#plan">Plan</a>
+    </nav>
+    <a class="btn small primary magnetic" href="#plan">See the plan</a>
+  </div>
+</header>
+
+<main id="top">
+  <section class="hero">
+    <div class="aurora" aria-hidden="true"><i></i><i></i><i></i></div>
+    <div class="wrap hero-grid">
+      <div>
+        <span class="eyebrow">Bybit USDT Perpetuals / M5 / for Tomas</span>
+        <h1>
+          <span class="line"><span class="w" style="--i:0">Catch</span> <span class="w" style="--i:1">the</span> <span class="w" style="--i:2">start.</span></span>
+          <span class="line"><span class="w accent" style="--i:3">Skip</span> <span class="w accent" style="--i:4">the</span> <span class="w accent" style="--i:5">fakes.</span></span>
+        </h1>
+        <p class="lead">An early pump &amp; dump detector for your existing bot. Every coin is scored every second. A trade is taken <b>only when the score is high and all 7 filters pass</b>. Watch it decide live.</p>
+        <div class="hero-cta">
+          <a class="btn primary magnetic" href="#decide">How it decides <svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
+          <a class="btn magnetic" href="#math">10 trades, 1 winner?</a>
+        </div>
+        <div class="facts">
+          <div><b>5</b><span>live Bybit data streams</span></div>
+          <div><b>0-100</b><span>score per coin</span></div>
+          <div><b>7</b><span>false-signal filters</span></div>
+          <div><b>20 / 20 / 60</b><span>TP split + Chandelier</span></div>
+        </div>
+      </div>
+
+      <div>
+        <div class="terminal glow" id="hero-term">
+          <div class="term-head"><span class="sym" id="h-sym">COIN-A / USDT</span><span>M5</span><span id="h-scn">Real pump</span><span class="live">SIMULATION</span></div>
+          <div class="term-chart"><canvas id="hero-cv" aria-label="Simulated M5 chart with the detector's decision" role="img"></canvas></div>
+          <div class="readout">
+            <div><small>Volume</small><b id="h-vol">1.0x</b></div>
+            <div><small>Market buys</small><b id="h-buy">50%</b></div>
+            <div><small>OI, 15 min</small><b id="h-oi">+0.0%</b></div>
+            <div><small>Range break</small><b id="h-brk">no</b></div>
+          </div>
+          <div class="scorebar"><span class="lbl">SCORE</span><div class="meter"><i id="h-meter"></i><span class="th" title="Threshold 70"></span></div><span class="num" id="h-score">0</span></div>
+          <div class="verdict" id="h-verdict" aria-live="polite"><span class="pill" id="h-pill">SCANNING</span><span id="h-why">Watching volume, order flow, open interest and the order book.</span></div>
+        </div>
+        <p class="sim-note">Simulated data. It shows the decision logic, not a trading result.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="block alt" id="decide">
+    <div class="wrap">
+      <div class="sec-head reveal">
+        <span class="eyebrow">Take or reject</span>
+        <h2>How the system decides, case by case</h2>
+        <p>You asked for the exact logic behind every decision. Pick a situation below. It is the same engine and the same rules each time. These are the six cases your bot will meet every day.</p>
+      </div>
+
+      <div class="tabs reveal" role="tablist" aria-label="Market situations" id="tabs"></div>
+
+      <div class="explorer">
+        <div class="card glow ex-chart reveal">
+          <div class="cv"><canvas id="ex-cv" role="img" aria-label="Scenario chart"></canvas></div>
+          <div class="story">
+            <h3><span id="ex-title">Real pump</span><span class="pill" id="ex-pill">TAKE LONG</span></h3>
+            <p id="ex-story"></p>
+          </div>
+        </div>
+        <div class="side-col">
+          <div class="card panel-pad reveal" style="--d:80ms">
+            <div class="panel-title"><span>Layer B / Ignition score</span><span>weight</span></div>
+            <div class="parts" id="ex-parts"></div>
+            <div class="total"><span class="panel-title" style="margin:0">Total</span><div class="meter"><i id="ex-meter"></i><span class="th"></span></div><span class="num" id="ex-score">0</span></div>
+          </div>
+          <div class="card panel-pad reveal" style="--d:160ms">
+            <div class="panel-title"><span>Layer C / Filters</span><span id="ex-fcount"></span></div>
+            <ul class="flist" id="ex-filters"></ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="block" id="math">
+    <div class="wrap">
+      <div class="sec-head reveal">
+        <span class="eyebrow">Your question</span>
+        <h2>10 trades, 1 winner, 9 losers. What happens?</h2>
+        <p>Profit does not come from winning often. It comes from losing small and keeping the big moves. Move the controls and see the result after fees.</p>
+      </div>
+      <div class="math">
+        <div class="card controls reveal">
+          <div class="ctrl">
+            <label for="m-wins">Winners out of 10 <output id="o-wins">1</output></label>
+            <input type="range" id="m-wins" min="0" max="10" step="1" value="1">
+          </div>
+          <div class="ctrl">
+            <span class="lab" id="lbl-move">Size of the winning move</span>
+            <div class="seg" role="group" aria-labelledby="lbl-move" id="m-move">
+              <button type="button" data-v="5" aria-pressed="false">+5%</button>
+              <button type="button" data-v="20" aria-pressed="true">+20%</button>
+              <button type="button" data-v="80" aria-pressed="false">+80%</button>
+            </div>
+          </div>
+          <div class="ctrl">
+            <label for="m-stop">Stop distance <output id="o-stop">1.5%</output></label>
+            <input type="range" id="m-stop" min="0.8" max="3" step="0.1" value="1.5">
+            <span class="hint">Distance from entry to the first stop. 1R = this distance.</span>
+          </div>
+          <div class="ctrl">
+            <label for="m-loss">Average loss <output id="o-loss">0.7R</output></label>
+            <input type="range" id="m-loss" min="0.4" max="1" step="0.05" value="0.7">
+            <span class="hint">Most losers leave early. If price does not follow through within 3 candles, the trade is closed before the stop.</span>
+          </div>
+          <p class="assume">Fees: 0.11% round trip (Bybit taker) on every trade. Runner exit assumes the Chandelier trail gives back about 25% of the peak move. Real values come from the backtest.</p>
+        </div>
+        <div class="card result reveal" style="--d:100ms">
+          <div class="big"><span class="val" id="r-total">0R</span><span class="unit">total after 10 trades, after fees</span></div>
+          <p class="verdict-line" id="r-line"></p>
+          <div class="math-cv"><canvas id="math-cv" role="img" aria-label="Ten trades and the running total in R"></canvas></div>
+          <div class="breakdown">
+            <div><small>TP1 20% at 1R</small><b id="b-tp1">+0.20R</b></div>
+            <div><small>TP2 20% at 2R</small><b id="b-tp2">+0.40R</b></div>
+            <div><small>Runner 60%</small><b id="b-run">+6.00R</b></div>
+            <div><small>Break-even</small><b id="b-be">1.1 / 10</b></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="block alt" id="filters">
+    <div class="wrap">
+      <div class="sec-head reveal">
+        <span class="eyebrow">Filter effectiveness</span>
+        <h2>Every filter has to earn its place</h2>
+        <p>Each rejected signal is still followed as a shadow trade, as if we had taken it. That shows, in R, what every filter saves or costs. A filter that blocks more winners than losers gets loosened or removed.</p>
+      </div>
+      <div class="fgrid">
+        <div class="card reveal">
+          <div class="illus"><b>Example layout.</b> Illustrative numbers. Your real numbers come from the backtest on your pairs.</div>
+          <div class="tbl-wrap">
+            <table>
+              <thead><tr><th>Filter</th><th>Blocked</th><th>Would have won</th><th>R saved by blocking</th><th>Action</th></tr></thead>
+              <tbody id="f-body"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="card guard reveal" style="--d:100ms">
+          <h3>When the market turns choppy</h3>
+          <ul>
+            <li><span class="ico"><svg viewBox="0 0 16 16" fill="none"><path d="M2 12l4-4 3 3 5-6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span><b>Adaptive threshold</b>If recent signals across the whole market keep failing, the score needed to trade rises on its own.</span></li>
+            <li><span class="ico"><svg viewBox="0 0 16 16" fill="none"><rect x="3" y="3" width="10" height="10" rx="2" stroke="currentColor" stroke-width="1.8"/><path d="M6.5 6v4M9.5 6v4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></span><span><b>Loss streak pause</b>After a set number of losses in a row, the module stops for the day.</span></li>
+            <li><span class="ico"><svg viewBox="0 0 16 16" fill="none"><path d="M8 2v8M4 6l4 4 4-4M3 14h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span><b>Max daily loss</b>A hard cap in % of equity. Hit it and nothing new opens until tomorrow.</span></li>
+            <li><span class="ico"><svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="5.5" stroke="currentColor" stroke-width="1.8"/><path d="M8 5v3l2 2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></span><span><b>Cooldown per coin</b>A coin that just failed a breakout is left alone for a while.</span></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="block" id="proof">
+    <div class="wrap">
+      <div class="sec-head reveal">
+        <span class="eyebrow">Proof before live money</span>
+        <h2>How it will be tested and proven</h2>
+        <p>You will not be asked to trust a description. Every step produces numbers you can check, and every trade is listed so you can find it on the chart yourself.</p>
+      </div>
+      <div class="steps">
+        <div class="card step glow reveal"><span class="k">STEP 1</span><h3>Real Bybit data</h3><p>6-12 months of trades, M5 candles, open interest and funding for all USDT perps. Order book and liquidations are recorded live from day one.</p></div>
+        <div class="card step glow reveal" style="--d:80ms"><span class="k">STEP 2</span><h3>Mark every big move</h3><p>Every real +5%, +20% and +80% day is marked. Then we measure: caught or missed, how early, and how much of the move was still left.</p></div>
+        <div class="card step glow reveal" style="--d:160ms"><span class="k">STEP 3</span><h3>Walk-forward test</h3><p>Tune on the first months, test on months the logic has never seen. If results break on unseen data, it is overfitted, and we fix it.</p></div>
+        <div class="card step glow reveal"><span class="k">STEP 4</span><h3>Real costs</h3><p>Taker fees on both sides, slippage from order book depth, and funding. No result is shown without them.</p></div>
+        <div class="card step glow reveal" style="--d:80ms"><span class="k">STEP 5</span><h3>Your bot as backtester</h3><p>The price, volume and OI logic also runs through your existing bot's backtest, so you see it in the tool you already use.</p></div>
+        <div class="card step glow reveal" style="--d:160ms"><span class="k">STEP 6</span><h3>Bybit Demo run</h3><p>The module trades on Bybit Demo with your bot. Demo results are compared with the backtest before any live money.</p></div>
+      </div>
+      <div class="card metrics reveal">
+        <strong>The report shows</strong>
+        <span class="m">detection rate</span><span class="m">minutes after move start</span><span class="m">% of move captured</span><span class="m">false signal rate</span><span class="m">win rate</span><span class="m">profit factor</span><span class="m">avg R</span><span class="m">max drawdown</span><span class="m">per coin</span><span class="m">every trade as CSV</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="block alt" id="plan">
+    <div class="wrap">
+      <div class="sec-head reveal">
+        <span class="eyebrow">Plan and price</span>
+        <h2>A finished, tested, ready-to-use module</h2>
+        <p>You don't need to touch code. You get tuned settings, one command to start, a short guide in plain words and a simple daily report.</p>
+      </div>
+      <div class="plan">
+        <div class="card ms glow reveal"><div class="top"><span class="id">M1</span><span class="price">$200</span></div><h3>Data + detector core</h3><span class="days">DAYS 1-2</span><p>Live Bybit streams, coin filter and the ignition score running on all USDT perps, with a signal log.</p><p class="check"><b>You check:</b> live signals and scores in the log.</p></div>
+        <div class="card ms glow reveal" style="--d:80ms"><div class="top"><span class="id">M2</span><span class="price">$200</span></div><h3>Filters + backtest</h3><span class="days">DAYS 3-4</span><p>All 7 filters, shadow trades, backtest with fees and slippage, first report.</p><p class="check"><b>You check:</b> the report and every trade in CSV.</p></div>
+        <div class="card ms glow reveal" style="--d:160ms"><div class="top"><span class="id">M3</span><span class="price">$200</span></div><h3>Tuning + integration</h3><span class="days">DAYS 5-6</span><p>Walk-forward tuning, dynamic leverage, TP 20 / 20 / 60 and your Chandelier, inside your bot.</p><p class="check"><b>You check:</b> it trades on Demo as specified.</p></div>
+        <div class="card ms glow reveal" style="--d:240ms"><div class="top"><span class="id">M4</span><span class="price">$200</span></div><h3>Demo + handover</h3><span class="days">DAY 7</span><p>Module live on Bybit Demo, first Demo report, setup guide and docs.</p><p class="check"><b>You check:</b> Demo logs, guide and docs.</p></div>
+      </div>
+
+      <div class="card gantt reveal">
+        <div class="g-row"><span></span><div class="g-days" id="g-days"></div></div>
+        <div class="g-row"><span>M1 Data + detector</span><div class="g-track" data-a="1" data-b="2"></div></div>
+        <div class="g-row"><span>M2 Filters + backtest</span><div class="g-track" data-a="3" data-b="4"></div></div>
+        <div class="g-row"><span>M3 Tuning + integration</span><div class="g-track" data-a="5" data-b="6"></div></div>
+        <div class="g-row"><span>M4 Demo + handover</span><div class="g-track" data-a="7" data-b="7"></div></div>
+        <div class="g-row"><span>Demo monitoring, free</span><div class="g-track" data-a="6" data-b="14" data-demo="1"></div></div>
+      </div>
+
+      <div class="card pay reveal">
+        <div class="sum"><span>Fixed price, all-inclusive</span><span class="tot">$800</span><span>7 days delivery, plus 7 days of Demo monitoring and 14 days of bug fixes at no extra cost.</span></div>
+        <div class="flow">
+          <div><span class="n">1</span><b>You fund one part</b><p>The money stays with Freelancer, not with me.</p></div>
+          <div><span class="n">2</span><b>You check it</b><p>Run it, read the report, test it on Demo.</p></div>
+          <div><span class="n">3</span><b>You release it</b><p>Only when you accept that part. Then the next one starts.</p></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="cta">
+    <div class="wrap">
+      <span class="eyebrow reveal">Next step</span>
+      <h2 class="reveal" style="margin-top:20px">Send the full spec. I reply the same day.</h2>
+      <p class="reveal">I check every requirement and every performance criterion in your spec, and tell you clearly which ones I commit to and how each will be measured. Everything stays in writing in the Freelancer chat.</p>
+      <div class="sig reveal"><span class="av">RJ</span><span><b>Ricardo Jose</b><span>Python and trading systems / Freelancer.com</span></span></div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>Signal Lab / prepared for Tomas</span>
+    <span>All charts on this page use simulated data to explain the logic. Nothing here is a trading result.</span>
+  </div>
+</footer>
+
+<script src="engine.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
