@@ -6,166 +6,202 @@
 <title>Signal Lab</title>
 <meta name="description" content="How the Early Pump &amp; Dump Detector decides which trades to take and which to reject. Interactive plan for Tomas.">
 <meta name="robots" content="noindex, nofollow">
-<meta name="theme-color" content="#070C17">
-<script>document.documentElement.classList.add("js")</script>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23070C17'/%3E%3Cpath d='M5 21h6l3-4 3 2 5-11' stroke='%234C9BE0' stroke-width='2.6' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3Ccircle cx='22' cy='8' r='3.2' fill='%23FFCF33'/%3E%3C/svg%3E">
+<meta name="theme-color" content="#04060B">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%2304060B'/%3E%3Cpath d='M5 21h6l3-4 3 2 5-11' stroke='%235B93F5' stroke-width='2.6' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3Ccircle cx='22' cy='8' r='3.2' fill='%23F2C14E'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&family=Instrument+Serif:ital@0;1&family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap">
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
 <style>
-/* Layout: trading-desk precision. Dark ink ground, chart-grid texture, one signal-yellow accent for decisions. */
+/* Night Desk: a short film about one detector. Ink-black ground, steel-blue structure, one gold signal for decisions.
+   Wide grotesque for titles, a serif italic for the human voice, mono for the instruments. */
 :root {
-  --bg: #070C17; --bg2: #0B1322; --panel: rgba(15, 25, 44, .72); --solid: #0F1A2D;
-  --line: rgba(140, 165, 210, .14); --line2: rgba(140, 165, 210, .28);
-  --fg: #E9EEF7; --muted: #8D9AB3; --blue: #4C9BE0; --blue-soft: rgba(76, 155, 224, .16);
-  --signal: #FFCF33; --signal-ink: #FFCF33; --signal-soft: rgba(255, 207, 51, .14); --head-accent: #FFCF33;
-  --up: #43C59E; --down: #F0675A; --up-soft: rgba(67, 197, 158, .14); --down-soft: rgba(240, 103, 90, .14);
-  --grid: rgba(140, 165, 210, .07); --shadow: 0 30px 80px -30px rgba(0, 0, 0, .7);
-  --display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --bg: #04060B; --bg2: #070B13; --panel: rgba(11, 17, 30, .68); --solid: #0A101C;
+  --line: rgba(150, 166, 198, .12); --line2: rgba(150, 166, 198, .24);
+  --fg: #E7ECF5; --muted: #8792A8; --blue: #5B93F5; --blue-soft: rgba(91, 147, 245, .14);
+  --signal: #F2C14E; --signal-ink: #F2C14E; --signal-soft: rgba(242, 193, 78, .13);
+  --up: #3DBE8E; --down: #E5574E; --up-soft: rgba(61, 190, 142, .13); --down-soft: rgba(229, 87, 78, .13);
+  --grid: rgba(150, 166, 198, .07); --shadow: 0 50px 120px -50px rgba(0, 0, 0, .95);
+  --display: "Archivo", "Arial Narrow", system-ui, sans-serif;
+  --serif: "Instrument Serif", Georgia, "Times New Roman", serif;
   --body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
   --mono: "JetBrains Mono", ui-monospace, Consolas, monospace;
-  --r: 18px; --max: 1180px;
+  --max: 1240px; --r: 20px;
   color-scheme: dark;
 }
-@media (prefers-color-scheme: light) {
-  :root:not([data-theme="dark"]) {
-    --bg: #F3F6FA; --bg2: #E8EEF6; --panel: rgba(255, 255, 255, .82); --solid: #FFFFFF;
-    --line: rgba(20, 40, 80, .12); --line2: rgba(20, 40, 80, .24);
-    --fg: #0B1F3A; --muted: #55637B; --blue: #0A64A8; --blue-soft: rgba(10, 100, 168, .1);
-    --signal: #FECC00; --signal-ink: #8A6400; --signal-soft: rgba(254, 204, 0, .22); --head-accent: #0A64A8;
-    --up: #12865D; --down: #C63F2E; --up-soft: rgba(18, 134, 93, .1); --down-soft: rgba(198, 63, 46, .1);
-    --grid: rgba(20, 40, 80, .06); --shadow: 0 30px 70px -34px rgba(11, 31, 58, .35);
-    color-scheme: light;
-  }
-}
-:root[data-theme="light"] {
-  --bg: #F3F6FA; --bg2: #E8EEF6; --panel: rgba(255, 255, 255, .82); --solid: #FFFFFF;
-  --line: rgba(20, 40, 80, .12); --line2: rgba(20, 40, 80, .24);
-  --fg: #0B1F3A; --muted: #55637B; --blue: #0A64A8; --blue-soft: rgba(10, 100, 168, .1);
-  --signal: #FECC00; --signal-ink: #8A6400; --signal-soft: rgba(254, 204, 0, .22); --head-accent: #0A64A8;
-  --up: #12865D; --down: #C63F2E; --up-soft: rgba(18, 134, 93, .1); --down-soft: rgba(198, 63, 46, .1);
-  --grid: rgba(20, 40, 80, .06); --shadow: 0 30px 70px -34px rgba(11, 31, 58, .35);
-  color-scheme: light;
-}
-
 * { box-sizing: border-box; }
-html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
-body {
-  margin: 0; background: var(--bg); color: var(--fg); font: 400 16px/1.6 var(--body);
-  overflow-x: hidden; -webkit-font-smoothing: antialiased;
-}
-img, canvas { max-width: 100%; display: block; }
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 400 16px/1.6 var(--body); overflow-x: hidden; -webkit-font-smoothing: antialiased; }
+img, video, canvas { max-width: 100%; display: block; }
 a { color: inherit; }
-h1, h2, h3 { font-family: var(--display); text-wrap: balance; margin: 0; letter-spacing: -.02em; }
+h1, h2, h3 { margin: 0; text-wrap: balance; }
 p { margin: 0; }
 :focus-visible { outline: 2px solid var(--signal); outline-offset: 3px; border-radius: 6px; }
-.wrap {
-  max-width: var(--max); margin: 0 auto;
-  padding-left: max(20px, env(safe-area-inset-left, 0px)); padding-right: max(20px, env(safe-area-inset-right, 0px));
-}
+.wrap { max-width: var(--max); margin: 0 auto; padding-left: max(20px, env(safe-area-inset-left, 0px)); padding-right: max(20px, env(safe-area-inset-right, 0px)); }
 .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
-.eyebrow {
-  font: 600 12px/1 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--blue);
-  display: inline-flex; align-items: center; gap: 10px;
-}
-.eyebrow::before { content: ""; width: 22px; height: 2px; background: var(--signal); }
+.serif { font-family: var(--serif); font-style: italic; font-weight: 400; letter-spacing: 0; }
 
-/* progress + nav */
-.progress { position: fixed; top: 0; left: 0; height: 2px; width: 100%; transform-origin: 0 50%; transform: scaleX(0);
-  background: linear-gradient(90deg, var(--blue), var(--signal)); z-index: 60; }
-.nav { position: sticky; top: 0; z-index: 50; backdrop-filter: blur(14px) saturate(140%); -webkit-backdrop-filter: blur(14px) saturate(140%);
-  background: color-mix(in srgb, var(--bg) 72%, transparent); border-bottom: 1px solid var(--line); }
-.nav .wrap { display: flex; align-items: center; gap: 24px; height: 62px; }
-.brand { display: flex; align-items: center; gap: 10px; font: 700 17px/1 var(--display); text-decoration: none; letter-spacing: -.01em; }
+/* film layer */
+.grain { position: fixed; inset: -50%; z-index: 90; pointer-events: none; opacity: .075; mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  animation: grain 1s steps(6) infinite; }
+@keyframes grain { 0% { transform: translate(0, 0); } 20% { transform: translate(-4%, 3%); } 40% { transform: translate(3%, -5%); } 60% { transform: translate(-6%, -2%); } 80% { transform: translate(5%, 4%); } 100% { transform: translate(0, 0); } }
+.lb { position: fixed; left: 0; right: 0; height: 13vh; background: #000; z-index: 95; pointer-events: none; }
+.lb.top { top: 0; } .lb.bot { bottom: 0; }
+.progress { position: fixed; top: 0; left: 0; height: 2px; width: 100%; transform-origin: 0 50%; transform: scaleX(0); background: linear-gradient(90deg, var(--blue), var(--signal)); z-index: 70; }
+.cursor { position: fixed; left: 0; top: 0; width: 34px; height: 34px; margin: -17px 0 0 -17px; border: 1px solid rgba(231, 236, 245, .55); border-radius: 50%; pointer-events: none; z-index: 96; transition: width .25s, height .25s, margin .25s, background .25s, border-color .25s; mix-blend-mode: difference; display: none; }
+.cursor.big { width: 64px; height: 64px; margin: -32px 0 0 -32px; background: rgba(231, 236, 245, .9); border-color: transparent; }
+@media (pointer: fine) { .cursor { display: block; } }
+
+/* nav */
+.nav { position: fixed; top: 0; left: 0; right: 0; z-index: 60; transition: background .4s, border-color .4s; border-bottom: 1px solid transparent; }
+.nav.scrolled { background: rgba(4, 6, 11, .72); backdrop-filter: blur(16px) saturate(140%); -webkit-backdrop-filter: blur(16px) saturate(140%); border-color: var(--line); }
+.nav .wrap { display: flex; align-items: center; gap: 24px; height: 68px; }
+.brand { display: flex; align-items: center; gap: 10px; font: 800 15px/1 var(--display); font-stretch: 112%; letter-spacing: .02em; text-transform: uppercase; text-decoration: none; }
 .brand svg { width: 26px; height: 26px; }
-.nav-links { display: flex; gap: 4px; margin-left: auto; }
-.nav-links a { text-decoration: none; color: var(--muted); font-size: 14px; padding: 8px 12px; border-radius: 999px; transition: color .2s, background .2s; }
+.nav-links { display: flex; gap: 2px; margin-left: auto; }
+.nav-links a { text-decoration: none; color: var(--muted); font: 500 12px/1 var(--mono); letter-spacing: .1em; text-transform: uppercase; padding: 10px 12px; border-radius: 999px; transition: color .2s, background .2s; }
 .nav-links a:hover, .nav-links a.active { color: var(--fg); background: var(--blue-soft); }
-@media (max-width: 860px) { .nav-links { display: none; } .nav .btn { margin-left: auto; } }
+@media (max-width: 900px) { .nav-links { display: none; } .nav .btn { margin-left: auto; } }
 
-.btn { --mx: 0px; --my: 0px; display: inline-flex; align-items: center; gap: 10px; font: 600 15px/1 var(--body);
-  padding: 15px 22px; border-radius: 999px; text-decoration: none; border: 1px solid var(--line2); color: var(--fg);
-  background: transparent; cursor: pointer; transform: translate(var(--mx), var(--my)); transition: transform .25s cubic-bezier(.2,.8,.2,1), background .2s, border-color .2s; }
+.btn { --mx: 0px; --my: 0px; display: inline-flex; align-items: center; gap: 12px; font: 600 15px/1 var(--body); padding: 16px 24px; border-radius: 999px; text-decoration: none; border: 1px solid var(--line2); color: var(--fg); background: rgba(4, 6, 11, .35); backdrop-filter: blur(8px); cursor: pointer; transform: translate(var(--mx), var(--my)); transition: transform .3s cubic-bezier(.2,.8,.2,1), background .25s, border-color .25s, color .25s; }
 .btn:hover { border-color: var(--fg); }
-.btn.primary { background: var(--signal); color: #0B1322; border-color: transparent; box-shadow: 0 10px 30px -10px color-mix(in srgb, var(--signal) 70%, transparent); }
-.btn.primary:hover { background: color-mix(in srgb, var(--signal) 88%, white); }
-.btn.small { padding: 10px 16px; font-size: 14px; }
-.btn svg { width: 16px; height: 16px; transition: transform .25s; }
-.btn:hover svg { transform: translateX(3px); }
+.btn.primary { background: var(--signal); color: #0A0D14; border-color: transparent; box-shadow: 0 14px 40px -14px rgba(242, 193, 78, .65); }
+.btn.primary:hover { background: #F7D27A; }
+.btn.small { padding: 11px 16px; font-size: 13.5px; }
+.btn svg { width: 16px; height: 16px; transition: transform .3s; }
+.btn:hover svg { transform: translateX(4px); }
+
+/* type */
+.eyebrow { display: inline-block; font: 600 11.5px/1 var(--mono); letter-spacing: .18em; text-transform: uppercase; color: var(--muted); }
+.eyebrow b { color: var(--signal); font-weight: 600; }
+.eyebrow::before { content: ""; display: inline-block; vertical-align: middle; width: 28px; height: 1px; margin: -2px 12px 0 0; background: var(--signal); }
+.h-xl { font: 800 clamp(44px, 8.4vw, 136px)/.86 var(--display); font-stretch: 118%; letter-spacing: -.035em; text-transform: uppercase; }
+.h-l { font: 800 clamp(34px, 5.2vw, 76px)/.95 var(--display); font-stretch: 112%; letter-spacing: -.03em; }
+.h-l .serif, .h-xl .serif { color: var(--signal); text-transform: none; font-stretch: normal; letter-spacing: -.01em; }
+.split { display: inline-block; overflow: hidden; vertical-align: top; padding-bottom: .04em; }
+.split > span { display: inline-block; will-change: transform; }
 
 /* hero */
-.hero { position: relative; isolation: isolate; overflow: hidden; padding-block: 72px 88px; }
+.hero { position: relative; min-height: 100svh; display: grid; align-items: end; overflow: hidden; isolation: isolate; }
+.hero .bgv { position: absolute; inset: 0; z-index: -3; overflow: hidden; }
+.hero .bgv video, .hero .bgv img { width: 100%; height: 100%; object-fit: cover; filter: brightness(.48) saturate(.8) contrast(1.12); transform: scale(1.12); }
 .hero::before { content: ""; position: absolute; inset: 0; z-index: -2;
-  background-image: linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px);
-  background-size: 48px 48px; mask-image: radial-gradient(ellipse 70% 70% at 60% 40%, #000 30%, transparent 75%); -webkit-mask-image: radial-gradient(ellipse 70% 70% at 60% 40%, #000 30%, transparent 75%); }
-.aurora { position: absolute; inset: -20% -10% auto; height: 120%; z-index: -3; filter: blur(70px); opacity: .55; pointer-events: none; }
-.aurora i { position: absolute; border-radius: 50%; animation: drift 22s ease-in-out infinite alternate; }
-.aurora i:nth-child(1) { width: 46vw; height: 46vw; left: 48%; top: 6%; background: radial-gradient(circle, color-mix(in srgb, var(--blue) 55%, transparent), transparent 65%); }
-.aurora i:nth-child(2) { width: 30vw; height: 30vw; left: 70%; top: 34%; background: radial-gradient(circle, color-mix(in srgb, var(--signal) 26%, transparent), transparent 65%); animation-duration: 28s; animation-delay: -8s; }
-.aurora i:nth-child(3) { width: 40vw; height: 40vw; left: -6%; top: 40%; background: radial-gradient(circle, color-mix(in srgb, var(--blue) 22%, transparent), transparent 65%); animation-duration: 34s; }
-@keyframes drift { to { transform: translate3d(-6vw, 5vh, 0) scale(1.15); } }
+  background: linear-gradient(180deg, rgba(4,6,11,.75) 0%, rgba(4,6,11,0) 28%, rgba(4,6,11,0) 45%, rgba(4,6,11,.85) 82%, var(--bg) 100%),
+              linear-gradient(90deg, rgba(4,6,11,.85) 0%, rgba(4,6,11,.2) 55%, rgba(4,6,11,0) 100%); }
+.hero::after { content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none; box-shadow: inset 0 0 240px 60px rgba(0,0,0,.85); }
+.hud { position: absolute; z-index: 2; font: 500 11px/1.5 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: rgba(231,236,245,.62); }
+.hud.tl { top: 92px; left: max(20px, env(safe-area-inset-left, 0px)); }
+.hud.tr { top: 92px; right: max(20px, env(safe-area-inset-right, 0px)); text-align: right; }
+.hud .rec::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--down); margin-right: 8px; vertical-align: 1px; animation: blink 1.2s steps(2) infinite; }
+@keyframes blink { 50% { opacity: .15; } }
+.corner { position: absolute; width: 22px; height: 22px; border-color: rgba(231,236,245,.4); border-style: solid; z-index: 2; }
+.corner.a { top: 84px; left: 12px; border-width: 1px 0 0 1px; } .corner.b { top: 84px; right: 12px; border-width: 1px 1px 0 0; }
+.corner.c { bottom: 76px; left: 12px; border-width: 0 0 1px 1px; } .corner.d { bottom: 76px; right: 12px; border-width: 0 1px 1px 0; }
+.hero-in { padding-block: 180px 150px; }
+.hero h1 { perspective: 800px; }
+.hero h1 .serif { display: block; font-size: 1.04em; line-height: .95; margin-top: .06em; }
+.hero-sub { display: grid; grid-template-columns: minmax(0, 520px) auto; gap: 40px; align-items: end; margin-top: 40px; }
+.hero-sub p { font-size: clamp(16px, 1.4vw, 19px); color: rgba(231,236,245,.78); }
+.hero-sub p b { color: var(--fg); font-weight: 600; }
+.hero-cta { display: flex; flex-wrap: wrap; gap: 12px; justify-content: flex-end; }
+.tape { position: absolute; left: 0; right: 0; bottom: 0; z-index: 3; border-top: 1px solid var(--line); background: rgba(4,6,11,.6); backdrop-filter: blur(10px); overflow: hidden; height: 46px; display: flex; align-items: center; }
+.tape-track { display: flex; gap: 46px; white-space: nowrap; animation: tape 48s linear infinite; padding-left: 46px; }
+.tape span { font: 500 12px/1 var(--mono); letter-spacing: .06em; color: var(--muted); }
+.tape span b { color: var(--fg); font-weight: 600; margin-right: 8px; }
+.tape .u { color: var(--up); } .tape .d { color: var(--down); } .tape .g { color: var(--signal); }
+@keyframes tape { to { transform: translateX(-50%); } }
 
-.hero-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.08fr); gap: 56px; align-items: center; }
-.hero h1 { font-size: clamp(44px, 6.4vw, 86px); line-height: .98; font-weight: 800; margin-top: 22px; }
-.hero h1 .line { display: block; overflow: hidden; padding-bottom: .06em; }
-.hero h1 .w { display: inline-block; animation: rise 1s cubic-bezier(.2,.8,.2,1) both; animation-delay: calc(var(--i) * 80ms + 120ms); }
-.hero h1 .accent { color: var(--head-accent); }
-@keyframes rise { from { transform: translateY(105%); } to { transform: none; } }
-.lead { font-size: clamp(17px, 1.5vw, 19px); color: var(--muted); max-width: 54ch; margin-top: 24px; }
-.lead b { color: var(--fg); font-weight: 600; }
-.hero-cta { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 34px; }
-.facts { display: grid; grid-template-columns: repeat(4, auto); justify-content: start; gap: 18px 30px; margin-top: 44px; padding-top: 24px; border-top: 1px solid var(--line); }
-.facts div { display: grid; gap: 2px; }
-.facts b { font: 700 22px/1.1 var(--display); white-space: nowrap; }
-.facts span { font-size: 13px; color: var(--muted); }
+/* scene 3d */
+.scene3d { position: relative; height: 380vh; background: var(--bg); }
+.scene3d .stick { position: sticky; top: 0; height: 100vh; height: 100svh; overflow: hidden; }
+.scene3d canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.scene3d .fallback { position: absolute; inset: 0; background: center / cover no-repeat url("media/field.jpg"); filter: brightness(.45); display: none; }
+.no3d .scene3d .fallback { display: block; }
+.scene3d .shade { position: absolute; inset: 0; pointer-events: none; background: linear-gradient(90deg, rgba(4,6,11,.9) 0%, rgba(4,6,11,.25) 50%, rgba(4,6,11,0) 70%), linear-gradient(180deg, var(--bg) 0%, rgba(4,6,11,0) 18%, rgba(4,6,11,0) 82%, var(--bg) 100%); }
+.caps { position: absolute; left: 0; right: 0; top: 50%; transform: translateY(-50%); }
+.cap { position: absolute; top: 0; left: max(20px, env(safe-area-inset-left, 0px)); max-width: 560px; transform: translateY(-50%); opacity: 0; transition: opacity .6s, transform .8s cubic-bezier(.2,.8,.2,1); }
+.cap.on { opacity: 1; transform: translateY(-50%); }
+.cap:not(.on) { transform: translateY(-40%); }
+.cap .k { font: 600 12px/1 var(--mono); color: var(--signal); letter-spacing: .16em; }
+.cap h3 { font: 800 clamp(34px, 4.8vw, 70px)/.95 var(--display); font-stretch: 112%; letter-spacing: -.03em; margin-top: 18px; }
+.cap h3 .serif { color: var(--signal); }
+.cap p { color: rgba(231,236,245,.75); font-size: 18px; margin-top: 18px; max-width: 44ch; }
+@media (min-width: 1300px) { .cap { left: calc((100vw - var(--max)) / 2 + 20px); } }
+.rail { position: absolute; right: max(24px, env(safe-area-inset-right, 0px)); top: 50%; transform: translateY(-50%); display: grid; gap: 14px; }
+.rail i { display: block; width: 2px; height: 38px; background: var(--line2); border-radius: 2px; position: relative; overflow: hidden; }
+.rail i::after { content: ""; position: absolute; inset: 0; background: var(--signal); transform: scaleY(var(--f, 0)); transform-origin: top; }
+.lock { position: absolute; left: 0; top: 0; z-index: 3; pointer-events: none; opacity: 0; transition: opacity .4s; font: 700 12px/1 var(--mono); letter-spacing: .1em; }
+.lock.on { opacity: 1; }
+.lock .tagbox { position: absolute; transform: translate(-50%, calc(-100% - 22px)); white-space: nowrap; background: rgba(10,16,28,.88); border: 1px solid var(--signal); color: var(--signal); padding: 9px 12px; border-radius: 8px; box-shadow: 0 0 40px -6px rgba(242,193,78,.6); }
+.lock .tagbox small { display: block; color: var(--muted); font-weight: 500; margin-top: 5px; letter-spacing: .08em; }
+.scene-hud { position: absolute; bottom: 28px; left: max(20px, env(safe-area-inset-left, 0px)); font: 500 11px/1 var(--mono); letter-spacing: .14em; color: var(--muted); text-transform: uppercase; }
+@media (min-width: 1300px) { .scene-hud { left: calc((100vw - var(--max)) / 2 + 20px); } }
 
-.terminal { position: relative; border-radius: 22px; background: var(--panel); border: 1px solid var(--line2);
-  box-shadow: var(--shadow); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); overflow: hidden; }
-.term-head { display: flex; align-items: center; gap: 10px; padding: 14px 18px; border-bottom: 1px solid var(--line); font: 500 12.5px/1 var(--mono); color: var(--muted); }
+/* sections */
+section.block { position: relative; padding-block: 140px; }
+.sec-head { display: grid; gap: 22px; max-width: 900px; margin-bottom: 56px; }
+.sec-head p { color: var(--muted); font-size: 18.5px; max-width: 60ch; }
+.sec-head p .serif { color: var(--fg); font-size: 1.2em; }
+.card { position: relative; border-radius: var(--r); background: var(--panel); border: 1px solid var(--line); overflow: hidden; backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
+.glow::after { content: ""; position: absolute; inset: 0; pointer-events: none; opacity: 0; transition: opacity .3s; border-radius: inherit;
+  background: radial-gradient(460px circle at var(--gx, 50%) var(--gy, 50%), rgba(91,147,245,.13), transparent 60%); }
+.glow:hover::after { opacity: 1; }
+
+/* media frame */
+.frame { position: relative; border-radius: var(--r); overflow: hidden; background: #000; border: 1px solid var(--line); }
+.frame video, .frame img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; filter: brightness(.62) saturate(.85) contrast(1.08); }
+.frame::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(180deg, rgba(4,6,11,.25), rgba(4,6,11,0) 35%, rgba(4,6,11,.75)); box-shadow: inset 0 0 120px rgba(0,0,0,.6); }
+.frame .lbl { position: absolute; z-index: 2; font: 500 10.5px/1.4 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: rgba(231,236,245,.7); }
+.frame .lbl.tl { top: 16px; left: 18px; } .frame .lbl.tr { top: 16px; right: 18px; } .frame .lbl.bl { bottom: 16px; left: 18px; } .frame .lbl.br { bottom: 16px; right: 18px; text-align: right; }
+.frame .over { position: absolute; z-index: 2; left: 0; right: 0; bottom: 0; padding: 40px 34px 34px; }
+.cine { aspect-ratio: 21 / 9; }
+
+/* detector (live) */
+.live-grid { display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); gap: 22px; align-items: stretch; }
+.live-left { display: grid; gap: 22px; grid-template-rows: auto 1fr; }
+.live-left .frame { min-height: 260px; }
+.facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; background: var(--line); border-radius: var(--r); overflow: hidden; border: 1px solid var(--line); }
+.facts div { background: var(--solid); padding: 22px 22px 20px; display: grid; gap: 4px; }
+.facts b { font: 800 34px/1 var(--display); font-stretch: 115%; letter-spacing: -.02em; }
+.facts span { font-size: 13.5px; color: var(--muted); }
+.terminal { position: relative; border-radius: 22px; background: rgba(10, 16, 28, .82); border: 1px solid var(--line2); box-shadow: var(--shadow); overflow: hidden; transform-style: preserve-3d; }
+.term-head { display: flex; align-items: center; gap: 10px; padding: 15px 20px; border-bottom: 1px solid var(--line); font: 500 12.5px/1 var(--mono); color: var(--muted); }
 .term-head .sym { color: var(--fg); font-weight: 600; }
-.live { margin-left: auto; display: inline-flex; align-items: center; gap: 7px; letter-spacing: .1em; font-size: 11px; }
-.live::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--signal); box-shadow: 0 0 0 0 var(--signal); animation: ping 1.8s infinite; }
-@keyframes ping { 70% { box-shadow: 0 0 0 8px transparent; } 100% { box-shadow: 0 0 0 0 transparent; } }
-.term-chart { position: relative; height: 290px; }
+.live { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; letter-spacing: .12em; font-size: 10.5px; }
+.live::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--signal); animation: ping 1.8s infinite; }
+@keyframes ping { 0% { box-shadow: 0 0 0 0 rgba(242,193,78,.6); } 70% { box-shadow: 0 0 0 8px rgba(242,193,78,0); } 100% { box-shadow: 0 0 0 0 rgba(242,193,78,0); } }
+.term-chart { position: relative; height: 320px; }
 .term-chart canvas { width: 100%; height: 100%; }
 .readout { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-top: 1px solid var(--line); }
-.readout div { padding: 12px 16px; border-right: 1px solid var(--line); min-width: 0; }
+.readout div { padding: 13px 18px; border-right: 1px solid var(--line); min-width: 0; }
 .readout div:last-child { border-right: 0; }
-.readout small { display: block; font: 500 10.5px/1.2 var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.readout small { display: block; font: 500 10.5px/1.2 var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .readout b { font: 600 17px/1.5 var(--mono); font-variant-numeric: tabular-nums; }
-.scorebar { display: flex; align-items: center; gap: 14px; padding: 14px 18px; border-top: 1px solid var(--line); }
-.scorebar .lbl { font: 500 11px/1 var(--mono); letter-spacing: .1em; color: var(--muted); }
-.meter { position: relative; flex: 1; height: 8px; border-radius: 99px; background: var(--line); overflow: visible; }
+.scorebar { display: flex; align-items: center; gap: 14px; padding: 15px 20px; border-top: 1px solid var(--line); }
+.scorebar .lbl { font: 500 11px/1 var(--mono); letter-spacing: .12em; color: var(--muted); }
+.meter { position: relative; flex: 1; height: 8px; border-radius: 99px; background: var(--line); }
 .meter i { position: absolute; inset: 0 auto 0 0; width: 0; border-radius: 99px; background: linear-gradient(90deg, var(--blue), var(--signal)); transition: width .25s ease; }
-.meter .th { position: absolute; left: 70%; top: -5px; bottom: -5px; width: 2px; background: var(--fg); opacity: .55; }
-.scorebar .num { font: 700 22px/1 var(--mono); min-width: 2.2ch; text-align: right; font-variant-numeric: tabular-nums; }
-.verdict { display: flex; align-items: center; gap: 12px; padding: 14px 18px; border-top: 1px solid var(--line); min-height: 62px; font-size: 14px; color: var(--muted); }
-.pill { flex: none; font: 700 12px/1 var(--mono); letter-spacing: .08em; padding: 8px 11px; border-radius: 8px; background: var(--line); color: var(--fg); }
+.meter .th { position: absolute; left: 70%; top: -5px; bottom: -5px; width: 2px; background: var(--fg); opacity: .5; }
+.scorebar .num { font: 700 24px/1 var(--mono); min-width: 2.2ch; text-align: right; font-variant-numeric: tabular-nums; }
+.verdict { display: flex; align-items: center; gap: 12px; padding: 15px 20px; border-top: 1px solid var(--line); min-height: 64px; font-size: 14px; color: var(--muted); }
+.pill { flex: none; font: 700 11.5px/1 var(--mono); letter-spacing: .1em; padding: 8px 11px; border-radius: 8px; background: var(--line); color: var(--fg); }
 .pill.take { background: var(--up-soft); color: var(--up); box-shadow: inset 0 0 0 1px var(--up); }
 .pill.reject { background: var(--down-soft); color: var(--down); box-shadow: inset 0 0 0 1px var(--down); }
 .pill.ignore { background: var(--blue-soft); color: var(--blue); box-shadow: inset 0 0 0 1px var(--blue); }
 .verdict.flash .pill { animation: pop .5s cubic-bezier(.2,1.6,.4,1); }
 @keyframes pop { from { transform: scale(.7); } }
-.sim-note { margin-top: 12px; font-size: 12.5px; color: var(--muted); display: flex; gap: 8px; align-items: center; }
+.sim-note { margin-top: 14px; font-size: 12.5px; color: var(--muted); display: flex; gap: 8px; align-items: center; }
 .sim-note::before { content: "SIM"; font: 700 10px/1 var(--mono); letter-spacing: .1em; padding: 4px 6px; border-radius: 5px; border: 1px solid var(--line2); }
 
-/* sections */
-section.block { padding-block: 110px; position: relative; }
-section.alt { background: var(--bg2); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
-.sec-head { display: grid; gap: 16px; max-width: 760px; margin-bottom: 48px; }
-.sec-head h2 { font-size: clamp(32px, 4.2vw, 54px); line-height: 1.04; font-weight: 800; }
-.sec-head p { color: var(--muted); font-size: 18px; max-width: 62ch; }
-.quote-tag { font-style: italic; color: var(--fg); }
-
-.card { position: relative; border-radius: var(--r); background: var(--panel); border: 1px solid var(--line); overflow: hidden; }
-.glow::after { content: ""; position: absolute; inset: 0; pointer-events: none; opacity: 0; transition: opacity .3s;
-  background: radial-gradient(420px circle at var(--gx, 50%) var(--gy, 50%), color-mix(in srgb, var(--blue) 14%, transparent), transparent 60%); }
-.glow:hover::after { opacity: 1; }
-
 /* explorer */
-.tabs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 22px; }
-.tab { display: inline-flex; align-items: center; gap: 9px; font: 500 14px/1 var(--body); padding: 11px 16px; border-radius: 999px;
-  border: 1px solid var(--line2); background: transparent; color: var(--muted); cursor: pointer; transition: all .2s; }
+.tabs { display: flex; flex-wrap: wrap; gap: 8px; margin: 34px 0 22px; }
+.tab { display: inline-flex; align-items: center; gap: 9px; font: 500 14px/1 var(--body); padding: 12px 17px; border-radius: 999px; border: 1px solid var(--line2); background: rgba(10,16,28,.5); color: var(--muted); cursor: pointer; transition: all .25s; }
 .tab:hover { color: var(--fg); border-color: var(--fg); }
 .tab[aria-selected="true"] { background: var(--fg); color: var(--bg); border-color: var(--fg); }
 .tab .dot { width: 8px; height: 8px; border-radius: 50%; }
@@ -173,169 +209,224 @@ section.alt { background: var(--bg2); border-top: 1px solid var(--line); border-
 .explorer { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 18px; }
 .ex-chart { padding: 6px 6px 0; display: flex; flex-direction: column; }
 .ex-chart .cv { flex: 1; min-height: 340px; position: relative; }
-.ex-chart .cv canvas { position: absolute; inset: 0; }
-.ex-chart .cv canvas { width: 100%; height: 100%; }
-.story { padding: 20px 22px 24px; border-top: 1px solid var(--line); display: grid; gap: 10px; }
-.story h3 { font-size: 22px; font-weight: 700; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.ex-chart .cv canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.story { padding: 22px 24px 26px; border-top: 1px solid var(--line); display: grid; gap: 10px; }
+.story h3 { font: 800 26px/1.1 var(--display); font-stretch: 110%; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .story p { color: var(--muted); max-width: 62ch; }
 .side-col { display: grid; gap: 18px; align-content: start; }
-.panel-pad { padding: 20px 22px; }
-.panel-title { display: flex; justify-content: space-between; align-items: baseline; font: 600 11.5px/1 var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); margin-bottom: 16px; }
+.panel-pad { padding: 22px 24px; }
+.panel-title { display: flex; justify-content: space-between; align-items: baseline; font: 600 11px/1 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); margin-bottom: 18px; }
 .parts { display: grid; gap: 13px; }
-.part { display: grid; grid-template-columns: 112px minmax(0, 1fr) 44px; gap: 12px; align-items: center; font-size: 14px; }
+.part { display: grid; grid-template-columns: 116px minmax(0, 1fr) 46px; gap: 12px; align-items: center; font-size: 14px; }
 .part .nm { font-weight: 500; }
 .part .nm small { display: block; font: 400 11.5px/1.35 var(--mono); color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .part .bar { height: 8px; border-radius: 99px; background: var(--line); overflow: hidden; }
-.part .bar i { display: block; height: 100%; width: 0; border-radius: inherit; background: var(--blue); transition: width .7s cubic-bezier(.2,.8,.2,1); }
+.part .bar i { display: block; height: 100%; width: 0; border-radius: inherit; background: var(--blue); transition: width .8s cubic-bezier(.2,.8,.2,1); }
 .part .pts { font: 600 13px/1 var(--mono); text-align: right; font-variant-numeric: tabular-nums; }
 .total { display: flex; align-items: center; gap: 14px; margin-top: 18px; padding-top: 16px; border-top: 1px dashed var(--line2); }
 .total .meter { height: 10px; }
-.total .num { font: 700 26px/1 var(--mono); }
+.total .num { font: 700 28px/1 var(--mono); }
 .flist { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
 .flist li { display: grid; grid-template-columns: 26px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 8px 0; font-size: 14px; border-bottom: 1px solid var(--line); }
 .flist li:last-child { border-bottom: 0; }
 .st { width: 22px; height: 22px; border-radius: 6px; display: grid; place-items: center; font: 700 12px/1 var(--mono); }
 .st.pass { background: var(--up-soft); color: var(--up); } .st.fail { background: var(--down-soft); color: var(--down); } .st.na { background: var(--line); color: var(--muted); }
-.flist .tag { font: 500 11px/1 var(--mono); color: var(--muted); letter-spacing: .06em; }
+.flist .tag { font: 500 10.5px/1 var(--mono); color: var(--muted); letter-spacing: .08em; text-transform: uppercase; }
 .flist li.fail-row { color: var(--down); }
+
+/* bleed (full-width film) */
+.bleed { position: relative; overflow: hidden; isolation: isolate; }
+.bleed > .bgv { position: absolute; inset: -12% 0; z-index: -2; }
+.bleed > .bgv video, .bleed > .bgv img { width: 100%; height: 100%; object-fit: cover; filter: brightness(.38) saturate(.8) contrast(1.1); }
+.bleed::before { content: ""; position: absolute; inset: 0; z-index: -1; background: linear-gradient(180deg, var(--bg) 0%, rgba(4,6,11,.35) 22%, rgba(4,6,11,.35) 78%, var(--bg) 100%); box-shadow: inset 0 0 200px rgba(0,0,0,.8); }
+
+/* film strip */
+.strip { position: relative; background: #000; padding: 30px 0; border-radius: 6px; margin-top: 56px; box-shadow: var(--shadow); }
+.strip::before, .strip::after { content: ""; position: absolute; left: 10px; right: 10px; height: 12px; background: repeating-linear-gradient(90deg, transparent 0 9px, rgba(231,236,245,.82) 9px 21px, transparent 21px 30px); border-radius: 2px; -webkit-mask: linear-gradient(#000 0 0); }
+.strip::before { top: 9px; } .strip::after { bottom: 9px; }
+.strip-in { position: relative; z-index: 1; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; padding: 0 8px; }
+.fr { position: relative; aspect-ratio: 4 / 5; overflow: hidden; border-radius: 3px; background: #0A0F18; transform-style: preserve-3d; }
+.fr img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; filter: brightness(.5) saturate(.75) contrast(1.15); transition: transform 1.2s cubic-bezier(.2,.8,.2,1), filter .6s; }
+.fr:hover img { transform: scale(1.08); filter: brightness(.62) saturate(.9) contrast(1.15); }
+.fr::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(0,0,0,0) 30%, rgba(0,0,0,.88)); }
+.fr .code { position: absolute; top: 12px; left: 14px; z-index: 2; font: 600 10.5px/1 var(--mono); letter-spacing: .14em; color: var(--signal); }
+.fr .txt { position: absolute; left: 18px; right: 18px; bottom: 18px; z-index: 2; display: grid; gap: 8px; }
+.fr h3 { font: 800 22px/1.05 var(--display); font-stretch: 108%; }
+.fr p { font-size: 13.5px; color: rgba(231,236,245,.72); }
+.fr .fix { font: 600 10.5px/1.3 var(--mono); color: var(--up); letter-spacing: .08em; text-transform: uppercase; }
 
 /* math */
 .math { display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); gap: 18px; }
-.controls { padding: 26px; display: grid; gap: 26px; align-content: start; }
+.controls { padding: 28px; display: grid; gap: 26px; align-content: start; }
 .ctrl { display: grid; gap: 10px; }
 .ctrl label, .ctrl .lab { display: flex; justify-content: space-between; align-items: baseline; font-weight: 500; font-size: 15px; }
-.ctrl output { font: 600 15px/1 var(--mono); color: var(--signal-ink); }
+.ctrl output { font: 600 15px/1 var(--mono); color: var(--signal); }
 .ctrl .hint { font-size: 13px; color: var(--muted); }
 input[type="range"] { -webkit-appearance: none; appearance: none; width: 100%; height: 26px; background: transparent; cursor: pointer; }
-input[type="range"]::-webkit-slider-runnable-track { height: 6px; border-radius: 99px; background: linear-gradient(90deg, var(--blue) var(--p, 50%), var(--line) var(--p, 50%)); }
-input[type="range"]::-moz-range-track { height: 6px; border-radius: 99px; background: linear-gradient(90deg, var(--blue) var(--p, 50%), var(--line) var(--p, 50%)); }
-input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 22px; height: 22px; margin-top: -8px; border-radius: 50%; background: var(--fg); border: 4px solid var(--bg); box-shadow: 0 0 0 1px var(--line2); transition: transform .15s; }
-input[type="range"]::-moz-range-thumb { width: 16px; height: 16px; border-radius: 50%; background: var(--fg); border: 4px solid var(--bg); }
-input[type="range"]:active::-webkit-slider-thumb { transform: scale(1.15); }
+input[type="range"]::-webkit-slider-runnable-track { height: 4px; border-radius: 99px; background: linear-gradient(90deg, var(--signal) var(--p, 50%), var(--line2) var(--p, 50%)); }
+input[type="range"]::-moz-range-track { height: 4px; border-radius: 99px; background: linear-gradient(90deg, var(--signal) var(--p, 50%), var(--line2) var(--p, 50%)); }
+input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 20px; height: 20px; margin-top: -8px; border-radius: 50%; background: var(--fg); border: 5px solid var(--bg); box-shadow: 0 0 0 1px var(--line2); transition: transform .15s; }
+input[type="range"]::-moz-range-thumb { width: 14px; height: 14px; border-radius: 50%; background: var(--fg); border: 5px solid var(--bg); }
+input[type="range"]:active::-webkit-slider-thumb { transform: scale(1.2); }
 .seg { display: grid; grid-template-columns: repeat(3, 1fr); padding: 4px; border-radius: 12px; background: var(--line); gap: 4px; }
-.seg button { font: 600 15px/1 var(--mono); padding: 11px 0; border: 0; border-radius: 9px; background: transparent; color: var(--muted); cursor: pointer; transition: all .2s; }
-.seg button[aria-pressed="true"] { background: var(--solid); color: var(--fg); box-shadow: 0 2px 10px -4px rgba(0,0,0,.4); }
-.result { padding: 26px; display: grid; gap: 20px; align-content: start; }
+.seg button { font: 600 15px/1 var(--mono); padding: 12px 0; border: 0; border-radius: 9px; background: transparent; color: var(--muted); cursor: pointer; transition: all .2s; }
+.seg button[aria-pressed="true"] { background: var(--fg); color: var(--bg); }
+.result { padding: 28px; display: grid; gap: 20px; align-content: start; }
 .big { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
-.big .val { font: 800 clamp(48px, 6vw, 72px)/1 var(--display); letter-spacing: -.03em; font-variant-numeric: tabular-nums; transition: color .3s; }
+.big .val { font: 800 clamp(54px, 7vw, 92px)/1 var(--display); font-stretch: 115%; letter-spacing: -.04em; font-variant-numeric: tabular-nums; transition: color .3s; }
 .big .unit { color: var(--muted); font-size: 15px; }
 .val.pos { color: var(--up); } .val.neg { color: var(--down); }
 .verdict-line { font-size: 16px; max-width: 58ch; }
 .math-cv { height: 200px; } .math-cv canvas { width: 100%; height: 100%; }
 .breakdown { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
 .breakdown div { padding: 12px 14px; border-radius: 12px; background: var(--line); min-width: 0; }
-.breakdown small { display: block; font: 500 11px/1.3 var(--mono); color: var(--muted); letter-spacing: .04em; }
+.breakdown small { display: block; font: 500 10.5px/1.3 var(--mono); color: var(--muted); letter-spacing: .06em; }
 .breakdown b { font: 600 17px/1.4 var(--mono); font-variant-numeric: tabular-nums; }
 .assume { font-size: 13px; color: var(--muted); }
+.math-film { margin-bottom: 18px; }
 
 /* filters */
 .fgrid { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 18px; }
 .tbl-wrap { overflow-x: auto; }
-table { width: 100%; border-collapse: collapse; font-size: 14px; min-width: 560px; }
-th { text-align: left; font: 600 11px/1.2 var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); padding: 14px 16px; border-bottom: 1px solid var(--line2); }
-td { padding: 13px 16px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; min-width: 580px; }
+th { text-align: left; font: 600 10.5px/1.25 var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); padding: 15px 16px; border-bottom: 1px solid var(--line2); }
+td { padding: 14px 16px; border-bottom: 1px solid var(--line); vertical-align: middle; }
 tr:last-child td { border-bottom: 0; }
 td.n { font-family: var(--mono); font-variant-numeric: tabular-nums; }
 .rbar { display: flex; align-items: center; gap: 10px; }
-.rbar i { display: block; height: 6px; border-radius: 99px; background: var(--up); width: var(--w); transform-origin: 0 50%; }
+.rbar i { display: block; height: 5px; border-radius: 99px; background: var(--up); width: var(--w); }
 .rbar i.neg { background: var(--down); }
-.chip { font: 700 10.5px/1 var(--mono); letter-spacing: .08em; padding: 6px 8px; border-radius: 6px; }
-.chip.keep { background: var(--up-soft); color: var(--up); } .chip.tune { background: var(--signal-soft); color: var(--signal-ink); }
-.illus { display: flex; align-items: center; gap: 10px; padding: 12px 16px; font-size: 13px; color: var(--signal-ink); background: var(--signal-soft); border-bottom: 1px solid var(--line); }
-.guard { padding: 24px; display: grid; gap: 18px; align-content: start; }
-.guard h3 { font-size: 22px; }
+.chip { font: 700 10.5px/1 var(--mono); letter-spacing: .1em; padding: 6px 8px; border-radius: 6px; }
+.chip.keep { background: var(--up-soft); color: var(--up); } .chip.tune { background: var(--signal-soft); color: var(--signal); }
+.illus { display: flex; align-items: center; gap: 10px; padding: 13px 16px; font-size: 13px; color: var(--signal); background: var(--signal-soft); border-bottom: 1px solid var(--line); }
+.guard { padding: 0; display: grid; align-content: start; }
+.guard .frame { border-radius: 0; border: 0; aspect-ratio: 16 / 8; }
+.guard .gin { padding: 24px; display: grid; gap: 18px; }
+.guard h3 { font: 800 24px/1.1 var(--display); font-stretch: 110%; }
 .guard ul { list-style: none; padding: 0; margin: 0; display: grid; gap: 14px; }
-.guard li { display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 12px; color: var(--muted); font-size: 15px; }
+.guard li { display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 12px; color: var(--muted); font-size: 14.5px; }
 .guard li b { color: var(--fg); font-weight: 600; display: block; }
 .ico { width: 30px; height: 30px; border-radius: 9px; background: var(--blue-soft); display: grid; place-items: center; color: var(--blue); }
 .ico svg { width: 16px; height: 16px; }
 
 /* proof */
-.steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; counter-reset: s; }
-.step { padding: 26px; display: grid; gap: 12px; align-content: start; transition: transform .35s cubic-bezier(.2,.8,.2,1), border-color .3s; }
-.step:hover { transform: translateY(-4px); border-color: var(--line2); }
-.step .k { font: 600 12px/1 var(--mono); color: var(--blue); letter-spacing: .1em; }
-.step h3 { font-size: 21px; font-weight: 700; }
-.step p { color: var(--muted); font-size: 15px; }
-.metrics { margin-top: 18px; padding: 22px 26px; display: flex; flex-wrap: wrap; gap: 10px 12px; align-items: center; }
-.metrics span.m { font: 500 13px/1 var(--mono); padding: 9px 12px; border-radius: 99px; border: 1px solid var(--line2); }
+.proof-in { padding-block: 170px; }
+.steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.step { padding: 28px; display: grid; gap: 12px; align-content: start; background: rgba(8, 12, 22, .62); transition: transform .4s cubic-bezier(.2,.8,.2,1), border-color .3s; }
+.step:hover { transform: translateY(-6px); border-color: var(--line2); }
+.step .k { font: 600 11.5px/1 var(--mono); color: var(--signal); letter-spacing: .14em; }
+.step h3 { font: 800 22px/1.1 var(--display); font-stretch: 108%; }
+.step p { color: rgba(231,236,245,.7); font-size: 15px; }
+.metrics { margin-top: 16px; padding: 22px 26px; display: flex; flex-wrap: wrap; gap: 10px 12px; align-items: center; background: rgba(8, 12, 22, .62); }
+.metrics span.m { font: 500 12.5px/1 var(--mono); padding: 9px 12px; border-radius: 99px; border: 1px solid var(--line2); }
 .metrics strong { margin-right: 8px; font-size: 15px; }
+
+/* ready */
+.ready { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 56px; align-items: center; }
+.ready .frame { aspect-ratio: 4 / 5; }
+.ready ol { list-style: none; padding: 0; margin: 34px 0 0; display: grid; gap: 0; border-top: 1px solid var(--line); }
+.ready li { display: grid; grid-template-columns: 54px minmax(0, 1fr); gap: 16px; padding: 22px 0; border-bottom: 1px solid var(--line); }
+.ready li .n { font: 400 34px/1 var(--serif); font-style: italic; color: var(--signal); }
+.ready li b { display: block; font: 700 19px/1.25 var(--display); font-stretch: 105%; margin-bottom: 4px; }
+.ready li span { color: var(--muted); font-size: 15px; }
 
 /* plan */
 .plan { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
-.ms { padding: 24px; display: grid; gap: 12px; align-content: start; }
+.ms { padding: 26px; display: grid; gap: 12px; align-content: start; }
 .ms .top { display: flex; justify-content: space-between; align-items: baseline; }
-.ms .id { font: 700 13px/1 var(--mono); color: var(--blue); letter-spacing: .08em; }
-.ms .price { font: 800 30px/1 var(--display); }
-.ms h3 { font-size: 19px; }
+.ms .id { font: 700 12px/1 var(--mono); color: var(--signal); letter-spacing: .12em; }
+.ms .price { font: 800 34px/1 var(--display); font-stretch: 112%; letter-spacing: -.02em; }
+.ms h3 { font: 700 19px/1.2 var(--display); font-stretch: 105%; }
 .ms p { color: var(--muted); font-size: 14.5px; }
-.ms .days { font: 500 12px/1 var(--mono); color: var(--muted); letter-spacing: .06em; }
+.ms .days { font: 500 11.5px/1 var(--mono); color: var(--muted); letter-spacing: .1em; }
 .ms .check { font-size: 13.5px; padding-top: 12px; border-top: 1px dashed var(--line2); }
 .ms .check b { color: var(--up); font-weight: 600; }
-.gantt { margin-top: 18px; padding: 22px 24px; }
-.g-row { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 14px; align-items: center; padding: 6px 0; font-size: 13.5px; }
+.gantt { margin-top: 14px; padding: 24px; }
+.g-row { display: grid; grid-template-columns: 170px minmax(0, 1fr); gap: 14px; align-items: center; padding: 6px 0; font-size: 13.5px; }
 .g-track { display: grid; grid-template-columns: repeat(14, 1fr); gap: 3px; height: 22px; }
-.g-track i { border-radius: 5px; background: var(--blue); transform-origin: 0 50%; }
+.g-track i { border-radius: 5px; background: linear-gradient(90deg, var(--blue), #7FA9F7); }
 .g-track i.demo { background: var(--blue-soft); box-shadow: inset 0 0 0 1px var(--blue); }
 .g-days { display: grid; grid-template-columns: repeat(14, 1fr); gap: 3px; font: 500 11px/1 var(--mono); color: var(--muted); text-align: center; }
-.pay { margin-top: 18px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 0; }
-.pay .sum { padding: 30px; border-right: 1px solid var(--line); display: grid; gap: 8px; align-content: center; }
-.pay .sum .tot { color: var(--fg); font: 800 clamp(44px, 5vw, 60px)/1 var(--display); letter-spacing: -.03em; }
+.pay { margin-top: 14px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); position: relative; isolation: isolate; }
+.pay > video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: -2; filter: brightness(.22) saturate(.7); }
+.pay::before { content: ""; position: absolute; inset: 0; z-index: -1; background: linear-gradient(90deg, rgba(10,16,28,.4), rgba(10,16,28,.85)); }
+.pay .sum { padding: 34px; border-right: 1px solid var(--line); display: grid; gap: 8px; align-content: center; }
+.pay .sum .tot { color: var(--fg); font: 800 clamp(54px, 6vw, 84px)/1 var(--display); font-stretch: 115%; letter-spacing: -.04em; }
 .pay .sum span { color: var(--muted); }
-.flow { padding: 30px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; position: relative; }
+.flow { padding: 34px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
 .flow div { display: grid; gap: 8px; align-content: start; }
-.flow .n { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; font: 700 14px/1 var(--mono); background: var(--signal); color: #0B1322; }
+.flow .n { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; font: 700 14px/1 var(--mono); background: var(--signal); color: #0A0D14; }
 .flow b { font-size: 16px; }
 .flow p { font-size: 14px; color: var(--muted); }
 
-.cta { padding-block: 130px 90px; text-align: left; }
-.cta h2 { font-size: clamp(36px, 5.4vw, 72px); line-height: 1.02; font-weight: 800; max-width: 16ch; }
-.cta p { color: var(--muted); font-size: 18px; margin-top: 22px; max-width: 56ch; }
-.sig { margin-top: 40px; display: flex; align-items: center; gap: 14px; }
-.sig .av { width: 46px; height: 46px; border-radius: 50%; background: linear-gradient(135deg, var(--blue), var(--signal)); display: grid; place-items: center; font: 800 17px/1 var(--display); color: #0B1322; }
-.sig b { display: block; } .sig span { color: var(--muted); font-size: 14px; }
+/* end credits */
+.end { padding-block: 170px 0; position: relative; overflow: hidden; }
+.end h2 { max-width: 15ch; }
+.end .lead { color: var(--muted); font-size: 19px; margin-top: 28px; max-width: 56ch; }
+.end .hero-cta { justify-content: flex-start; margin-top: 36px; }
+.credits { position: relative; height: 340px; margin-top: 110px; overflow: hidden; -webkit-mask: linear-gradient(180deg, transparent, #000 22%, #000 78%, transparent); mask: linear-gradient(180deg, transparent, #000 22%, #000 78%, transparent); border-top: 1px solid var(--line); }
+.roll { display: grid; gap: 34px; text-align: center; animation: roll 30s linear infinite; padding-top: 340px; }
+.roll div { display: grid; gap: 6px; }
+.roll small { font: 600 10.5px/1 var(--mono); letter-spacing: .24em; text-transform: uppercase; color: var(--muted); }
+.roll b { font: 400 30px/1.1 var(--serif); font-style: italic; }
+@keyframes roll { to { transform: translateY(-100%); } }
 footer { border-top: 1px solid var(--line); padding-block: 26px 34px; color: var(--muted); font-size: 13px; }
 footer .wrap { display: flex; flex-wrap: wrap; gap: 10px 30px; justify-content: space-between; }
 
-/* reveal */
-.js .reveal { opacity: 0; transform: translateY(26px); transition: opacity .9s cubic-bezier(.2,.8,.2,1), transform .9s cubic-bezier(.2,.8,.2,1); transition-delay: var(--d, 0ms); }
-.js .reveal.in { opacity: 1; transform: none; }
-
 @media (max-width: 1020px) {
-  .hero-grid, .explorer, .math, .fgrid, .pay { grid-template-columns: minmax(0, 1fr); }
+  .live-grid, .explorer, .math, .fgrid, .pay, .ready { grid-template-columns: minmax(0, 1fr); }
   .plan { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .steps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .strip-in { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .pay .sum { border-right: 0; border-bottom: 1px solid var(--line); }
+  .hero-sub { grid-template-columns: minmax(0, 1fr); }
+  .hero-cta { justify-content: flex-start; }
+  .ready .frame { aspect-ratio: 16 / 10; }
 }
 @media (max-width: 620px) {
   .wrap { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
-  .hero { padding-block: 40px 64px; }
-  section.block { padding-block: 76px; }
+  .hero-in { padding-block: 150px 110px; }
+  .hud.tr { display: none; }
+  .corner { display: none; }
+  section.block { padding-block: 96px; }
+  .proof-in { padding-block: 110px; }
   .readout { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .readout div:nth-child(2) { border-right: 0; }
   .readout div:nth-child(-n+2) { border-bottom: 1px solid var(--line); }
-  .term-chart { height: 230px; }
+  .term-chart { height: 240px; }
   .ex-chart .cv { min-height: 260px; flex: none; height: 260px; }
-  .plan, .steps, .flow { grid-template-columns: minmax(0, 1fr); }
+  .plan, .steps, .flow, .strip-in { grid-template-columns: minmax(0, 1fr); }
+  .fr { aspect-ratio: 16 / 11; }
   .breakdown { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .part { grid-template-columns: 96px minmax(0, 1fr) 40px; }
+  .part { grid-template-columns: 98px minmax(0, 1fr) 40px; }
   .g-row { grid-template-columns: 1fr; gap: 6px; }
   .g-days { display: none; }
-  .facts { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+  .cine { aspect-ratio: 4 / 3; }
+  .cap p { font-size: 16px; }
+  .rail { display: none; }
+  .scene3d .shade { background: linear-gradient(180deg, var(--bg) 0%, rgba(4,6,11,.55) 30%, rgba(4,6,11,.55) 70%, var(--bg) 100%); }
 }
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
-  .js .reveal { opacity: 1; transform: none; }
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+  .lb { display: none; }
+  .scene3d { height: auto; }
+  .scene3d .stick { position: relative; height: auto; padding-block: 120px; }
+  .caps { position: static; transform: none; }
+  .cap { position: static; opacity: 1; transform: none; margin-bottom: 48px; }
+  .cap:not(.on) { transform: none; }
 }
 </style>
 </head>
 <body>
+<div class="grain" aria-hidden="true"></div>
+<div class="lb top" aria-hidden="true"></div><div class="lb bot" aria-hidden="true"></div>
+<div class="cursor" aria-hidden="true"></div>
 <div class="progress" id="progress"></div>
 
-<header class="nav">
+<header class="nav" id="nav">
   <div class="wrap">
     <a class="brand" href="#top" aria-label="Signal Lab, back to top">
-      <svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="var(--solid)" stroke="var(--line2)"/><path d="M5 21h6l3-4 3 2 5-11" stroke="var(--blue)" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/><circle cx="22" cy="8" r="3.2" fill="var(--signal)"/></svg>
+      <svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="#0A101C" stroke="rgba(150,166,198,.3)"/><path d="M5 21h6l3-4 3 2 5-11" stroke="#5B93F5" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/><circle cx="22" cy="8" r="3.2" fill="#F2C14E"/></svg>
       Signal Lab
     </a>
     <nav class="nav-links" aria-label="Sections">
@@ -350,58 +441,106 @@ footer .wrap { display: flex; flex-wrap: wrap; gap: 10px 30px; justify-content: 
 </header>
 
 <main id="top">
+  <!-- SCENE 01 -->
   <section class="hero">
-    <div class="aurora" aria-hidden="true"><i></i><i></i><i></i></div>
-    <div class="wrap hero-grid">
-      <div>
-        <span class="eyebrow">Bybit USDT Perpetuals / M5 / for Tomas</span>
-        <h1>
-          <span class="line"><span class="w" style="--i:0">Catch</span> <span class="w" style="--i:1">the</span> <span class="w" style="--i:2">start.</span></span>
-          <span class="line"><span class="w accent" style="--i:3">Skip</span> <span class="w accent" style="--i:4">the</span> <span class="w accent" style="--i:5">fakes.</span></span>
-        </h1>
-        <p class="lead">An early pump &amp; dump detector for your existing bot. Every coin is scored every second. A trade is taken <b>only when the score is high and all 7 filters pass</b>. Watch it decide live.</p>
-        <div class="hero-cta">
-          <a class="btn primary magnetic" href="#decide">How it decides <svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
+    <div class="bgv"><video id="hero-video" src="media/hero.mp4" poster="media/hero.jpg" autoplay muted loop playsinline preload="auto"></video></div>
+    <span class="corner a"></span><span class="corner b"></span><span class="corner c"></span><span class="corner d"></span>
+    <div class="hud tl">Scene 01 / Opening<br>Bybit / USDT-Perp / M5</div>
+    <div class="hud tr"><span class="rec">REC</span> <span id="tc">00:00:00:00</span><br>Prepared for Tomas</div>
+    <div class="wrap hero-in">
+      <span class="eyebrow"><b>Early Pump &amp; Dump Detector</b> / module for your bot</span>
+      <h1 class="h-xl" style="margin-top:28px">
+        <span class="split"><span class="w">Catch</span></span> <span class="split"><span class="w">the</span></span> <span class="split"><span class="w">start.</span></span>
+        <span class="serif"><span class="split"><span class="w">Skip</span></span> <span class="split"><span class="w">the</span></span> <span class="split"><span class="w">fakes.</span></span></span>
+      </h1>
+      <div class="hero-sub">
+        <p class="fade-up">Every USDT perpetual on Bybit, scored every second. A trade is taken <b>only when the score is high and all 7 filters pass</b>. Everything else is rejected, with a reason you can read.</p>
+        <div class="hero-cta fade-up">
+          <a class="btn primary magnetic" href="#detector">Watch it decide <svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
           <a class="btn magnetic" href="#math">10 trades, 1 winner?</a>
         </div>
-        <div class="facts">
-          <div><b>5</b><span>live Bybit data streams</span></div>
-          <div><b>0-100</b><span>score per coin</span></div>
-          <div><b>7</b><span>false-signal filters</span></div>
-          <div><b>20 / 20 / 60</b><span>TP split + Chandelier</span></div>
-        </div>
       </div>
+    </div>
+    <div class="tape" aria-label="Simulated signal tape">
+      <div class="tape-track" id="tape"></div>
+    </div>
+  </section>
 
-      <div>
-        <div class="terminal glow" id="hero-term">
-          <div class="term-head"><span class="sym" id="h-sym">COIN-A / USDT</span><span>M5</span><span id="h-scn">Real pump</span><span class="live">SIMULATION</span></div>
-          <div class="term-chart"><canvas id="hero-cv" aria-label="Simulated M5 chart with the detector's decision" role="img"></canvas></div>
-          <div class="readout">
-            <div><small>Volume</small><b id="h-vol">1.0x</b></div>
-            <div><small>Market buys</small><b id="h-buy">50%</b></div>
-            <div><small>OI, 15 min</small><b id="h-oi">+0.0%</b></div>
-            <div><small>Range break</small><b id="h-brk">no</b></div>
+  <!-- SCENE 02: 3D -->
+  <section class="scene3d" id="scene" aria-label="How the detector sees the market">
+    <div class="stick">
+      <div class="fallback"></div>
+      <canvas id="three"></canvas>
+      <div class="shade"></div>
+      <div class="lock" id="lock"><div class="tagbox" id="lockbox">SCORE 94 / TAKE LONG<small>all 7 filters passed</small></div></div>
+      <div class="caps">
+        <div class="cap on" data-i="0"><span class="k">SCENE 02 / 01</span><h3>Every USDT perp. <span class="serif">Every second.</span></h3><p>Hundreds of coins move at once. The detector watches all of them, all the time, so you don't have to.</p></div>
+        <div class="cap" data-i="1"><span class="k">SCENE 02 / 02</span><h3>Five streams <span class="serif">per coin.</span></h3><p>Trades, order book, open interest, funding and liquidations, straight from the Bybit v5 WebSocket.</p></div>
+        <div class="cap" data-i="2"><span class="k">SCENE 02 / 03</span><h3>One score, <span class="serif">0 to 100.</span></h3><p>Volume, order flow, range break, open interest and order book, weighted into one number per coin.</p></div>
+        <div class="cap" data-i="3"><span class="k">SCENE 02 / 04</span><h3>Only one <span class="serif">lights up.</span></h3><p>Score above 70 and all 7 filters pass. That is a trade. The rest of the market stays dark.</p></div>
+      </div>
+      <div class="rail" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+      <div class="scene-hud">Scroll to move the camera / 3D render</div>
+    </div>
+  </section>
+
+  <!-- SCENE 03: live detector -->
+  <section class="block" id="detector">
+    <div class="wrap">
+      <div class="sec-head">
+        <span class="eyebrow"><b>Scene 03</b> / live detector</span>
+        <h2 class="h-l splitme">Watch it <span class="serif">decide.</span></h2>
+        <p>A simulated coin feed runs on the right. Watch the score climb, then the decision: <span class="serif">take it, reject it, or ignore it.</span></p>
+      </div>
+      <div class="live-grid">
+        <div class="live-left">
+          <div class="frame reveal-frame" style="min-height:280px">
+            <video data-src="media/graph.mp4" poster="media/graph.jpg" muted loop playsinline preload="none"></video>
+            <span class="lbl tl">Clip 03A</span><span class="lbl tr">M5 / Bybit</span>
+            <div class="over"><span class="serif" style="font-size:30px;line-height:1.1">The first five minutes decide the trade.</span></div>
           </div>
-          <div class="scorebar"><span class="lbl">SCORE</span><div class="meter"><i id="h-meter"></i><span class="th" title="Threshold 70"></span></div><span class="num" id="h-score">0</span></div>
-          <div class="verdict" id="h-verdict" aria-live="polite"><span class="pill" id="h-pill">SCANNING</span><span id="h-why">Watching volume, order flow, open interest and the order book.</span></div>
+          <div class="facts">
+            <div><b data-count="5">5</b><span>live Bybit data streams</span></div>
+            <div><b>0-100</b><span>score per coin</span></div>
+            <div><b data-count="7">7</b><span>false-signal filters</span></div>
+            <div><b>20/20/60</b><span>TP split + your Chandelier</span></div>
+          </div>
         </div>
-        <p class="sim-note">Simulated data. It shows the decision logic, not a trading result.</p>
+        <div>
+          <div class="terminal glow tilt" id="hero-term">
+            <div class="term-head"><span class="sym" id="h-sym">COIN-A / USDT</span><span>M5</span><span id="h-scn">Real pump</span><span class="live">SIMULATION</span></div>
+            <div class="term-chart"><canvas id="hero-cv" aria-label="Simulated M5 chart with the detector's decision" role="img"></canvas></div>
+            <div class="readout">
+              <div><small>Volume</small><b id="h-vol">1.0x</b></div>
+              <div><small>Market buys</small><b id="h-buy">50%</b></div>
+              <div><small>OI, 15 min</small><b id="h-oi">+0.0%</b></div>
+              <div><small>Range break</small><b id="h-brk">no</b></div>
+            </div>
+            <div class="scorebar"><span class="lbl">SCORE</span><div class="meter"><i id="h-meter"></i><span class="th" title="Threshold 70"></span></div><span class="num" id="h-score">0</span></div>
+            <div class="verdict" id="h-verdict" aria-live="polite"><span class="pill" id="h-pill">SCANNING</span><span id="h-why">Watching volume, order flow, open interest and the order book.</span></div>
+          </div>
+          <p class="sim-note">Simulated data. It shows the decision logic, not a trading result.</p>
+        </div>
       </div>
     </div>
   </section>
 
-  <section class="block alt" id="decide">
+  <!-- SCENE 04: decisions -->
+  <section class="block" id="decide" style="padding-top:40px">
     <div class="wrap">
-      <div class="sec-head reveal">
-        <span class="eyebrow">Take or reject</span>
-        <h2>How the system decides, case by case</h2>
-        <p>You asked for the exact logic behind every decision. Pick a situation below. It is the same engine and the same rules each time. These are the six cases your bot will meet every day.</p>
+      <div class="frame cine reveal-frame">
+        <video data-src="media/field.mp4" poster="media/field.jpg" muted loop playsinline preload="none"></video>
+        <span class="lbl tl">Scene 04 / take or reject</span><span class="lbl tr">6 situations / 1 rule set</span>
+        <div class="over">
+          <h2 class="h-l splitme">How it decides, <span class="serif">case by case.</span></h2>
+          <p style="color:rgba(231,236,245,.75);margin-top:16px;max-width:58ch;font-size:17px">You asked for the exact logic behind every decision. Pick a situation. Same engine, same rules. These are the six cases your bot meets every day.</p>
+        </div>
       </div>
 
-      <div class="tabs reveal" role="tablist" aria-label="Market situations" id="tabs"></div>
+      <div class="tabs" role="tablist" aria-label="Market situations" id="tabs"></div>
 
       <div class="explorer">
-        <div class="card glow ex-chart reveal">
+        <div class="card glow ex-chart">
           <div class="cv"><canvas id="ex-cv" role="img" aria-label="Scenario chart"></canvas></div>
           <div class="story">
             <h3><span id="ex-title">Real pump</span><span class="pill" id="ex-pill">TAKE LONG</span></h3>
@@ -409,12 +548,12 @@ footer .wrap { display: flex; flex-wrap: wrap; gap: 10px 30px; justify-content: 
           </div>
         </div>
         <div class="side-col">
-          <div class="card panel-pad reveal" style="--d:80ms">
+          <div class="card panel-pad">
             <div class="panel-title"><span>Layer B / Ignition score</span><span>weight</span></div>
             <div class="parts" id="ex-parts"></div>
             <div class="total"><span class="panel-title" style="margin:0">Total</span><div class="meter"><i id="ex-meter"></i><span class="th"></span></div><span class="num" id="ex-score">0</span></div>
           </div>
-          <div class="card panel-pad reveal" style="--d:160ms">
+          <div class="card panel-pad">
             <div class="panel-title"><span>Layer C / Filters</span><span id="ex-fcount"></span></div>
             <ul class="flist" id="ex-filters"></ul>
           </div>
@@ -423,15 +562,36 @@ footer .wrap { display: flex; flex-wrap: wrap; gap: 10px 30px; justify-content: 
     </div>
   </section>
 
+  <!-- SCENE 05: where bots lose -->
+  <section class="bleed">
+    <div class="bgv"><video data-src="media/red.mp4" poster="media/red.jpg" muted loop playsinline preload="none"></video></div>
+    <div class="wrap" style="padding-block:170px">
+      <div class="sec-head" style="margin-bottom:0">
+        <span class="eyebrow"><b>Scene 05</b> / where bots bleed</span>
+        <h2 class="h-l splitme">Most breakout bots lose money <span class="serif">in four places.</span></h2>
+        <p>Each one has a filter built for it. This is where most of the money is saved.</p>
+      </div>
+      <div class="strip">
+        <div class="strip-in">
+          <article class="fr tilt"><img src="media/still-screen.jpg" alt="" loading="lazy"><span class="code">05A</span><div class="txt"><h3>Fake pumps on thin coins</h3><p>One market order moves price 3%. The bot buys. Price falls back.</p><span class="fix">Coin filter + execution check</span></div></article>
+          <article class="fr tilt"><img src="media/still-glasses.jpg" alt="" loading="lazy"><span class="code">05B</span><div class="txt"><h3>Wick breakouts</h3><p>Price spikes over the level for seconds, then closes back inside.</p><span class="fix">Close confirmation + follow-through</span></div></article>
+          <article class="fr tilt"><img src="media/still-tablet.jpg" alt="" loading="lazy"><span class="code">05C</span><div class="txt"><h3>Late entries</h3><p>The signal comes when 80% of the move is done. The bot buys the top.</p><span class="fix">Late-entry guard</span></div></article>
+          <article class="fr tilt"><img src="media/still-coins.jpg" alt="" loading="lazy"><span class="code">05D</span><div class="txt"><h3>Absorption</h3><p>Heavy buying hits a big seller. Volume looks great. Price goes nowhere.</p><span class="fix">Absorption check</span></div></article>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SCENE 06: math -->
   <section class="block" id="math">
     <div class="wrap">
-      <div class="sec-head reveal">
-        <span class="eyebrow">Your question</span>
-        <h2>10 trades, 1 winner, 9 losers. What happens?</h2>
-        <p>Profit does not come from winning often. It comes from losing small and keeping the big moves. Move the controls and see the result after fees.</p>
+      <div class="sec-head">
+        <span class="eyebrow"><b>Scene 06</b> / your question</span>
+        <h2 class="h-l splitme">10 trades. 1 winner. <span class="serif">What happens?</span></h2>
+        <p>Profit does not come from winning often. It comes from <span class="serif">losing small and keeping the big moves.</span> Move the controls and see the result after fees.</p>
       </div>
       <div class="math">
-        <div class="card controls reveal">
+        <div class="card controls">
           <div class="ctrl">
             <label for="m-wins">Winners out of 10 <output id="o-wins">1</output></label>
             <input type="range" id="m-wins" min="0" max="10" step="1" value="1">
@@ -456,7 +616,11 @@ footer .wrap { display: flex; flex-wrap: wrap; gap: 10px 30px; justify-content: 
           </div>
           <p class="assume">Fees: 0.11% round trip (Bybit taker) on every trade. Runner exit assumes the Chandelier trail gives back about 25% of the peak move. Real values come from the backtest.</p>
         </div>
-        <div class="card result reveal" style="--d:100ms">
+        <div class="card result">
+          <div class="frame math-film" style="aspect-ratio:21/7">
+            <video data-src="media/profit.mp4" poster="media/profit.jpg" muted loop playsinline preload="none"></video>
+            <span class="lbl tl">Clip 06A</span><span class="lbl br">R = risk per trade</span>
+          </div>
           <div class="big"><span class="val" id="r-total">0R</span><span class="unit">total after 10 trades, after fees</span></div>
           <p class="verdict-line" id="r-line"></p>
           <div class="math-cv"><canvas id="math-cv" role="img" aria-label="Ten trades and the running total in R"></canvas></div>
@@ -471,15 +635,16 @@ footer .wrap { display: flex; flex-wrap: wrap; gap: 10px 30px; justify-content: 
     </div>
   </section>
 
-  <section class="block alt" id="filters">
+  <!-- SCENE 07: filters -->
+  <section class="block" id="filters" style="padding-top:40px">
     <div class="wrap">
-      <div class="sec-head reveal">
-        <span class="eyebrow">Filter effectiveness</span>
-        <h2>Every filter has to earn its place</h2>
+      <div class="sec-head">
+        <span class="eyebrow"><b>Scene 07</b> / filter effectiveness</span>
+        <h2 class="h-l splitme">Every filter has to <span class="serif">earn its place.</span></h2>
         <p>Each rejected signal is still followed as a shadow trade, as if we had taken it. That shows, in R, what every filter saves or costs. A filter that blocks more winners than losers gets loosened or removed.</p>
       </div>
       <div class="fgrid">
-        <div class="card reveal">
+        <div class="card">
           <div class="illus"><b>Example layout.</b> Illustrative numbers. Your real numbers come from the backtest on your pairs.</div>
           <div class="tbl-wrap">
             <table>
@@ -488,56 +653,86 @@ footer .wrap { display: flex; flex-wrap: wrap; gap: 10px 30px; justify-content: 
             </table>
           </div>
         </div>
-        <div class="card guard reveal" style="--d:100ms">
-          <h3>When the market turns choppy</h3>
-          <ul>
-            <li><span class="ico"><svg viewBox="0 0 16 16" fill="none"><path d="M2 12l4-4 3 3 5-6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span><b>Adaptive threshold</b>If recent signals across the whole market keep failing, the score needed to trade rises on its own.</span></li>
-            <li><span class="ico"><svg viewBox="0 0 16 16" fill="none"><rect x="3" y="3" width="10" height="10" rx="2" stroke="currentColor" stroke-width="1.8"/><path d="M6.5 6v4M9.5 6v4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></span><span><b>Loss streak pause</b>After a set number of losses in a row, the module stops for the day.</span></li>
-            <li><span class="ico"><svg viewBox="0 0 16 16" fill="none"><path d="M8 2v8M4 6l4 4 4-4M3 14h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span><b>Max daily loss</b>A hard cap in % of equity. Hit it and nothing new opens until tomorrow.</span></li>
-            <li><span class="ico"><svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="5.5" stroke="currentColor" stroke-width="1.8"/><path d="M8 5v3l2 2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></span><span><b>Cooldown per coin</b>A coin that just failed a breakout is left alone for a while.</span></li>
-          </ul>
+        <div class="card guard">
+          <div class="frame">
+            <video data-src="media/tickers.mp4" poster="media/tickers.jpg" muted loop playsinline preload="none"></video>
+            <span class="lbl tl">Clip 07A</span><span class="lbl br">bad market days</span>
+          </div>
+          <div class="gin">
+            <h3>When the market turns choppy</h3>
+            <ul>
+              <li><span class="ico"><svg viewBox="0 0 16 16" fill="none"><path d="M2 12l4-4 3 3 5-6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span><b>Adaptive threshold</b>If recent signals across the market keep failing, the score needed to trade rises on its own.</span></li>
+              <li><span class="ico"><svg viewBox="0 0 16 16" fill="none"><rect x="3" y="3" width="10" height="10" rx="2" stroke="currentColor" stroke-width="1.8"/><path d="M6.5 6v4M9.5 6v4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></span><span><b>Loss streak pause</b>After a set number of losses in a row, the module stops for the day.</span></li>
+              <li><span class="ico"><svg viewBox="0 0 16 16" fill="none"><path d="M8 2v8M4 6l4 4 4-4M3 14h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span><b>Max daily loss</b>A hard cap in % of equity. Hit it and nothing new opens until tomorrow.</span></li>
+              <li><span class="ico"><svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="5.5" stroke="currentColor" stroke-width="1.8"/><path d="M8 5v3l2 2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></span><span><b>Cooldown per coin</b>A coin that just failed a breakout is left alone for a while.</span></li>
+            </ul>
+          </div>
         </div>
       </div>
     </div>
   </section>
 
-  <section class="block" id="proof">
-    <div class="wrap">
-      <div class="sec-head reveal">
-        <span class="eyebrow">Proof before live money</span>
-        <h2>How it will be tested and proven</h2>
+  <!-- SCENE 08: proof -->
+  <section class="bleed" id="proof">
+    <div class="bgv"><video data-src="media/hall.mp4" poster="media/hall.jpg" muted loop playsinline preload="none"></video></div>
+    <div class="wrap proof-in">
+      <div class="sec-head">
+        <span class="eyebrow"><b>Scene 08</b> / proof before live money</span>
+        <h2 class="h-l splitme">Tested on real data. <span class="serif">Checked by you.</span></h2>
         <p>You will not be asked to trust a description. Every step produces numbers you can check, and every trade is listed so you can find it on the chart yourself.</p>
       </div>
       <div class="steps">
-        <div class="card step glow reveal"><span class="k">STEP 1</span><h3>Real Bybit data</h3><p>6-12 months of trades, M5 candles, open interest and funding for all USDT perps. Order book and liquidations are recorded live from day one.</p></div>
-        <div class="card step glow reveal" style="--d:80ms"><span class="k">STEP 2</span><h3>Mark every big move</h3><p>Every real +5%, +20% and +80% day is marked. Then we measure: caught or missed, how early, and how much of the move was still left.</p></div>
-        <div class="card step glow reveal" style="--d:160ms"><span class="k">STEP 3</span><h3>Walk-forward test</h3><p>Tune on the first months, test on months the logic has never seen. If results break on unseen data, it is overfitted, and we fix it.</p></div>
-        <div class="card step glow reveal"><span class="k">STEP 4</span><h3>Real costs</h3><p>Taker fees on both sides, slippage from order book depth, and funding. No result is shown without them.</p></div>
-        <div class="card step glow reveal" style="--d:80ms"><span class="k">STEP 5</span><h3>Your bot as backtester</h3><p>The price, volume and OI logic also runs through your existing bot's backtest, so you see it in the tool you already use.</p></div>
-        <div class="card step glow reveal" style="--d:160ms"><span class="k">STEP 6</span><h3>Bybit Demo run</h3><p>The module trades on Bybit Demo with your bot. Demo results are compared with the backtest before any live money.</p></div>
+        <div class="card step glow"><span class="k">STEP 01</span><h3>Real Bybit data</h3><p>6-12 months of trades, M5 candles, open interest and funding for all USDT perps. Order book and liquidations recorded live from day one.</p></div>
+        <div class="card step glow"><span class="k">STEP 02</span><h3>Mark every big move</h3><p>Every real +5%, +20% and +80% day is marked. Then we measure: caught or missed, how early, and how much of the move was left.</p></div>
+        <div class="card step glow"><span class="k">STEP 03</span><h3>Walk-forward test</h3><p>Tune on the first months, test on months the logic has never seen. If results break on unseen data, it is overfitted, and we fix it.</p></div>
+        <div class="card step glow"><span class="k">STEP 04</span><h3>Real costs</h3><p>Taker fees on both sides, slippage from order book depth, and funding. No result is shown without them.</p></div>
+        <div class="card step glow"><span class="k">STEP 05</span><h3>Your bot as backtester</h3><p>The price, volume and OI logic also runs through your existing bot's backtest, in the tool you already use.</p></div>
+        <div class="card step glow"><span class="k">STEP 06</span><h3>Bybit Demo run</h3><p>The module trades on Bybit Demo with your bot. Demo results are compared with the backtest before any live money.</p></div>
       </div>
-      <div class="card metrics reveal">
+      <div class="card metrics">
         <strong>The report shows</strong>
         <span class="m">detection rate</span><span class="m">minutes after move start</span><span class="m">% of move captured</span><span class="m">false signal rate</span><span class="m">win rate</span><span class="m">profit factor</span><span class="m">avg R</span><span class="m">max drawdown</span><span class="m">per coin</span><span class="m">every trade as CSV</span>
       </div>
     </div>
   </section>
 
-  <section class="block alt" id="plan">
+  <!-- SCENE 09: ready to use -->
+  <section class="block">
+    <div class="wrap ready">
+      <div class="frame reveal-frame tilt">
+        <video data-src="media/analyst.mp4" poster="media/analyst.jpg" muted loop playsinline preload="none"></video>
+        <span class="lbl tl">Scene 09</span><span class="lbl br">your side of the screen</span>
+      </div>
+      <div>
+        <span class="eyebrow"><b>Scene 09</b> / ready to use</span>
+        <h2 class="h-l splitme" style="margin-top:22px">You don't touch <span class="serif">the code.</span></h2>
+        <p style="color:var(--muted);font-size:18px;margin-top:22px;max-width:52ch">You asked for a fully developed, tested, ready-to-use product. This is what arrives.</p>
+        <ol>
+          <li><span class="n">i.</span><span><b>Tuned settings</b><span>Thresholds already set from the backtest. Change them only if you want to.</span></span></li>
+          <li><span class="n">ii.</span><span><b>One command to start</b><span>An ON / OFF switch in one config file. Your current bot logic is not changed.</span></span></li>
+          <li><span class="n">iii.</span><span><b>A guide in plain words</b><span>Short, with screenshots. No technical background needed.</span></span></li>
+          <li><span class="n">iv.</span><span><b>A simple daily report</b><span>Signals, trades, rejected signals with reasons, and P&amp;L.</span></span></li>
+        </ol>
+      </div>
+    </div>
+  </section>
+
+  <!-- SCENE 10: plan -->
+  <section class="block" id="plan" style="padding-top:40px">
     <div class="wrap">
-      <div class="sec-head reveal">
-        <span class="eyebrow">Plan and price</span>
-        <h2>A finished, tested, ready-to-use module</h2>
-        <p>You don't need to touch code. You get tuned settings, one command to start, a short guide in plain words and a simple daily report.</p>
+      <div class="sec-head">
+        <span class="eyebrow"><b>Scene 10</b> / plan and price</span>
+        <h2 class="h-l splitme">Four parts. <span class="serif">You release each one.</span></h2>
+        <p>Fixed price. Seven days. Every part is checked by you before any money moves.</p>
       </div>
       <div class="plan">
-        <div class="card ms glow reveal"><div class="top"><span class="id">M1</span><span class="price">$200</span></div><h3>Data + detector core</h3><span class="days">DAYS 1-2</span><p>Live Bybit streams, coin filter and the ignition score running on all USDT perps, with a signal log.</p><p class="check"><b>You check:</b> live signals and scores in the log.</p></div>
-        <div class="card ms glow reveal" style="--d:80ms"><div class="top"><span class="id">M2</span><span class="price">$200</span></div><h3>Filters + backtest</h3><span class="days">DAYS 3-4</span><p>All 7 filters, shadow trades, backtest with fees and slippage, first report.</p><p class="check"><b>You check:</b> the report and every trade in CSV.</p></div>
-        <div class="card ms glow reveal" style="--d:160ms"><div class="top"><span class="id">M3</span><span class="price">$200</span></div><h3>Tuning + integration</h3><span class="days">DAYS 5-6</span><p>Walk-forward tuning, dynamic leverage, TP 20 / 20 / 60 and your Chandelier, inside your bot.</p><p class="check"><b>You check:</b> it trades on Demo as specified.</p></div>
-        <div class="card ms glow reveal" style="--d:240ms"><div class="top"><span class="id">M4</span><span class="price">$200</span></div><h3>Demo + handover</h3><span class="days">DAY 7</span><p>Module live on Bybit Demo, first Demo report, setup guide and docs.</p><p class="check"><b>You check:</b> Demo logs, guide and docs.</p></div>
+        <div class="card ms glow"><div class="top"><span class="id">M1</span><span class="price">$200</span></div><h3>Data + detector core</h3><span class="days">DAYS 1-2</span><p>Live Bybit streams, coin filter and the ignition score running on all USDT perps, with a signal log.</p><p class="check"><b>You check:</b> live signals and scores in the log.</p></div>
+        <div class="card ms glow"><div class="top"><span class="id">M2</span><span class="price">$200</span></div><h3>Filters + backtest</h3><span class="days">DAYS 3-4</span><p>All 7 filters, shadow trades, backtest with fees and slippage, first report.</p><p class="check"><b>You check:</b> the report and every trade in CSV.</p></div>
+        <div class="card ms glow"><div class="top"><span class="id">M3</span><span class="price">$200</span></div><h3>Tuning + integration</h3><span class="days">DAYS 5-6</span><p>Walk-forward tuning, dynamic leverage, TP 20 / 20 / 60 and your Chandelier, inside your bot.</p><p class="check"><b>You check:</b> it trades on Demo as specified.</p></div>
+        <div class="card ms glow"><div class="top"><span class="id">M4</span><span class="price">$200</span></div><h3>Demo + handover</h3><span class="days">DAY 7</span><p>Module live on Bybit Demo, first Demo report, setup guide and docs.</p><p class="check"><b>You check:</b> Demo logs, guide and docs.</p></div>
       </div>
 
-      <div class="card gantt reveal">
+      <div class="card gantt">
         <div class="g-row"><span></span><div class="g-days" id="g-days"></div></div>
         <div class="g-row"><span>M1 Data + detector</span><div class="g-track" data-a="1" data-b="2"></div></div>
         <div class="g-row"><span>M2 Filters + backtest</span><div class="g-track" data-a="3" data-b="4"></div></div>
@@ -546,7 +741,8 @@ footer .wrap { display: flex; flex-wrap: wrap; gap: 10px 30px; justify-content: 
         <div class="g-row"><span>Demo monitoring, free</span><div class="g-track" data-a="6" data-b="14" data-demo="1"></div></div>
       </div>
 
-      <div class="card pay reveal">
+      <div class="card pay">
+        <video data-src="media/coin.mp4" poster="media/coin.jpg" muted loop playsinline preload="none" aria-hidden="true"></video>
         <div class="sum"><span>Fixed price, all-inclusive</span><span class="tot">$800</span><span>7 days delivery, plus 7 days of Demo monitoring and 14 days of bug fixes at no extra cost.</span></div>
         <div class="flow">
           <div><span class="n">1</span><b>You fund one part</b><p>The money stays with Freelancer, not with me.</p></div>
@@ -557,12 +753,26 @@ footer .wrap { display: flex; flex-wrap: wrap; gap: 10px 30px; justify-content: 
     </div>
   </section>
 
-  <section class="cta">
+  <!-- END -->
+  <section class="end">
     <div class="wrap">
-      <span class="eyebrow reveal">Next step</span>
-      <h2 class="reveal" style="margin-top:20px">Send the full spec. I reply the same day.</h2>
-      <p class="reveal">I check every requirement and every performance criterion in your spec, and tell you clearly which ones I commit to and how each will be measured. Everything stays in writing in the Freelancer chat.</p>
-      <div class="sig reveal"><span class="av">RJ</span><span><b>Ricardo Jose</b><span>Python and trading systems / Freelancer.com</span></span></div>
+      <span class="eyebrow"><b>Final scene</b> / next step</span>
+      <h2 class="h-xl splitme" style="margin-top:26px">Send the spec. <span class="serif">I reply the same day.</span></h2>
+      <p class="lead">I check every requirement and every performance criterion in your spec, and tell you clearly which ones I commit to and how each will be measured. Everything stays in writing in the Freelancer chat.</p>
+      <div class="hero-cta"><a class="btn primary magnetic" href="#top">Back to the opening</a></div>
+    </div>
+    <div class="credits" aria-label="Credits">
+      <div class="roll">
+        <div><small>Directed and built by</small><b>Ricardo Jose</b></div>
+        <div><small>Prepared for</small><b>Tomas</b></div>
+        <div><small>Detection</small><b>Coin filter / Ignition score / Seven filters</b></div>
+        <div><small>Risk</small><b>Fixed % risk / Dynamic leverage / TP 20-20-60</b></div>
+        <div><small>Trailing</small><b>Your ATR Chandelier</b></div>
+        <div><small>Data</small><b>Bybit v5 public streams</b></div>
+        <div><small>Proof</small><b>Walk-forward backtest / Bybit Demo</b></div>
+        <div><small>Footage</small><b>Mixkit, free license</b></div>
+        <div><small>3D</small><b>three.js</b></div>
+      </div>
     </div>
   </section>
 </main>
@@ -570,11 +780,15 @@ footer .wrap { display: flex; flex-wrap: wrap; gap: 10px 30px; justify-content: 
 <footer>
   <div class="wrap">
     <span>Signal Lab / prepared for Tomas</span>
-    <span>All charts on this page use simulated data to explain the logic. Nothing here is a trading result.</span>
+    <span>All charts and the 3D scene use simulated data to explain the logic. Nothing here is a trading result.</span>
   </div>
 </footer>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
 <script src="engine.js"></script>
 <script src="app.js"></script>
+<script src="fx.js"></script>
+<script type="module" src="scene.js"></script>
 </body>
 </html>
